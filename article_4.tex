@@ -1,0 +1,52 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\begin{document}
+
+\title{Exponential Integrators for PDEs arising in meteorology} 
+\maketitle
+\author{Harvey Sutton}
+
+\tableofcontents
+\newpage
+
+\section {Introduction}
+%Statement of ODE
+It is common within applied mathematics to encounter ODEs of the form
+\begin{align}
+\dot u(t) = Au(t) + N(u) \label{ODE}
+\end{align}
+Where $A$ is a large sparse matrix and $N$ denotes some nonlinear term.
+As a result, finding accurate approximate solutions to these equations is of major importance.\\
+
+%Method of lines
+These ODEs also occure when solving PDEs numerically using the method of lines.
+This arrives from discretising the PDE in space yielding an ODE with respect to time, with the form shown in \eqref{ODE}.\\
+%ODE Solvers
+Soving these ODEs numerically works by progressively stepping through time such as with the explicit forward Euler method, which is given as:
+\begin{align*}
+u(t+h) &= u(t) + h\dot u(t) = u(t) + h(Au(t) + N(u(t)))
+\end{align*}
+for a given step size $h$.
+%Exponential Integrators
+Another method (and the one we will be focusing on here) employs the use of the exponential integrator, which writes the solution to problem \eqref{ODE} over a given time step as:
+\begin{align*}
+u(t+h) &= e^{Ah}u(t) + \int_0^h e^{A(h-z)}N(u(t+z)) dz \label{ODE Solution}\\
+\text{where } e^{A} &= \sum^{\inf}_{i = 0}\frac{A^n}{n!}
+\end{align*}
+%Computing matrix exponential for A sparse
+An important requirement when using this method is to compute approximations of $e^{A}v$ efficiently and accurately for the given sparse matrix $A$ and vector $v$.
+One approach would be first to compute $e^A$ and apply the resulting matrix to the vector $v$.
+However, even for sparse $A$, $e^{A}$ will likely be dense. For large $A$ this will result in very high memory usage, which may not be practical when approximating solutions to \eqref{ODE Solution}.
+One solution to reduce memory usage is to compute $e^{A}v$ directly without computing $e^{A}$ as an intermediary step.\\
+Various methods have been proposed for this such as by Al-Mohy, Awad H. and Higham, Nicholas J\cite{AlMohy2011} which is currently used in the Scipy package as \verb|scipy.sparse.linalg.expm_multiply|.
+Another class of methods known as Krylov subspace methods have gained traction recently\cite{Moler2003}.
+These work by projecting the problem onto a space with fewer dimensions (the kyrlov subspace), computing the matrix exponential and then transforming back to the original space.
+As the matrix exponential will be computed in the lower dimension kyrlov subspace the computation cost of this step will not be significant.
+
+\newpage
+\bibliographystyle{plain}
+\bibliography{References.bib}
+
+\end{document}
