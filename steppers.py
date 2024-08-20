@@ -35,7 +35,7 @@ def printResult(method,error):
 # $u_t + N[u] = 0$
 
 # %%
-class BaseSolver:
+class BaseStepper:
     def __init__(self, N, method="explicit"):
         self.N = N
         self.method = method
@@ -129,9 +129,9 @@ class BaseSolver:
 
 # %%
 # solve d_t u + N(u) = 0 using u^{n+1} = u^n - tau N(u^n)
-class FESolver(BaseSolver):
+class FEStepper(BaseStepper):
     def __init__(self, N):
-        BaseSolver.__init__(self,N,"explicit")
+        BaseStepper.__init__(self,N,"explicit")
         self.name = "FE"
 
     def __call__(self, target, tau):
@@ -145,9 +145,9 @@ class FESolver(BaseSolver):
 
 # %%
 # solve d_t u + N(u) = 0 using u^{n+1} = u^n - tau N(u^{n+1})
-class BESolver(BaseSolver):
+class BEStepper(BaseStepper):
     def __init__(self, N, method):
-        BaseSolver.__init__(self,N,method)
+        BaseStepper.__init__(self,N,method)
         self.name = "BE"
 
     def __call__(self, target, tau):
@@ -189,9 +189,9 @@ class BESolver(BaseSolver):
 # So in each step we need to solve
 # ( I + tau A^n ) u^{n+1} = u^n - tau R^n(u^n)
 #                         = ( I + tau A^n) u^n - tau N(u^n)
-class SISolver(BaseSolver):
+class SIStepper(BaseStepper):
     def __init__(self, N):
-        BaseSolver.__init__(self,N, "quasiNewton")  # quasiNewton computes D in 'setup'
+        BaseStepper.__init__(self,N, "quasiNewton")  # quasiNewton computes D in 'setup'
         self.name = "SI1"
 
     def __call__(self, target, tau):
@@ -253,11 +253,11 @@ op = galerkin(a-bf-bg, domainSpace=space, rangeSpace=space)
 tauFE = 7e-5 # time step (FE fails with tau=8e-5 on the [80,80] grid)
 
 if False: # use FE
-    stepper = FESolver(op)
+    stepper = FEStepper(op)
     tau = tauFE
 else:
-    # stepper = BESolver(op, method="Newton")
-    stepper = SISolver(op)
+    # stepper = BEStepper(op, method="Newton")
+    stepper = SIStepper(op)
     tau = tauFE*10000
 
 # initial condition
