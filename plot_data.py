@@ -9,7 +9,7 @@ e_threshold = 1e-10
 # %%
 with open("Experiment_Data.pickle", "rb") as file:
     data = pickle.load(file)
-ns = [1000, 10000, 100000]
+ns = [1000, 10000, 100000,1000000]
 # %%
 for n in ns:
     ndata = data[data["N"] == n]

@@ -26,8 +26,8 @@ def GetA(n):
 methods = {
     "Scipy": lambda A, v, m: expm_multiply(A,v),
     "Arnoldi": ArnoldiExp,
-    "Lanzcos": LanzcosExp,
-    "NBLA": NBLAExp
+    "Lanzcos": LanzcosExp#,
+    #"NBLA": NBLAExp
 }
 m = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]
 n = [10,20,30,40,50,60,70,80,90,
@@ -90,7 +90,7 @@ for index, row in data.iterrows():
         # Gets an average
         total_time = 0
         total_error = 0
-        count = 1
+        count = 10
         for i in range(count):
             start = time.time()
             result = method(A, V, M)
