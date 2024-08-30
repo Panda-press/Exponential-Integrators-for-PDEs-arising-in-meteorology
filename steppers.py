@@ -288,10 +288,10 @@ exact = as_vector([ ( 1/2*(x[0]**2+x[1]**2) - 1/3*(x[0]**3 - x[1]**3) + 1 ) *
 
 # f = - laplace u      and grad(u).n = grad(exact).n on the boundary and f = - laplace(exact)
 # fv dx = - laplace u v dx = grad(u).grad(v) dx - grad(u).n v ds
-# fv dx + grad(exact).n v ds = grad(u).grad(v) dx
+# grad(u).grad(v) dx - (-laplace exact)v dx - grad(exact).n v ds = 0
 
-a  = ( inner(grad(u),grad(v)) + (1+dot(u,u))*dot(u,v) ) * dx
-bf = (-div(grad(exact[0])) + (1+exact[0]**2)*exact[0]) * v[0] * dx
+a  = ( inner(grad(u),grad(v)) ) * dx # + (1+dot(u,u))*dot(u,v) ) * dx
+bf = (-div(grad(exact[0])) ) * v[0] * dx # + (1+exact[0]**2)*exact[0]) * v[0] * dx
 bg = dot(grad(exact[0]),n)*v[0]*ds
 op = galerkin(a-bf-bg)
 
@@ -307,13 +307,13 @@ if False: # use FE
     # stepper = FEStepper(op)
     tau = tauFE
 else:
-    # stepper = BEStepper(op, method="Newton")
+    stepper = BEStepper(op, method="Newton")
     # stepper = SIStepper(op)
-    stepper = ExponentialStepper(op, method=expm_multiply, method_name="Scipy")
+    # stepper = ExponentialStepper(op, method=expm_multiply, method_name="Scipy")
     tau = tauFE*100 # *100 # *10000
 
 # initial condition
-u_h.interpolate( 1.5 )
+u_h.interpolate( exact )
 upd = u_h.copy()
 
 # time loop
@@ -332,6 +332,7 @@ while True:
     # we expect u^n -> exact for n->infty, i.e., u' -> 0
     # so we stop if upd = u^n - u^{n+1} is small
     upd.as_numpy[:] -= u_h.as_numpy[:]
+    upd.plot()
     update = np.sqrt( np.dot(upd.as_numpy,upd.as_numpy) )
     print(f"time step {n}, time {time}, N {stepper.countN}, iterations {info}, update {update}")
     if update < check:
