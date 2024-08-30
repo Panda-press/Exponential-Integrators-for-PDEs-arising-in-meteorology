@@ -9,7 +9,7 @@ e_threshold = 1e-10
 # %%
 with open("Experiment_Data.pickle", "rb") as file:
     data = pickle.load(file)
-ns = [1000, 10000, 100000]
+ns = [1000, 10000, 100000,1000000]
 # %%
 for n in ns:
     ndata = data[data["N"] == n]
@@ -37,8 +37,8 @@ for n in ns:
         plt.ylabel("Computation Time $s$")
         plt.title("Graph Compairing M and Computation Time for N={0}".format(n))
         plt.legend()
-
-        plt.figure(3)        
+        
+        plt.figure(3)
         if method == "Scipy":
             plt.vlines(mean_computation_time, np.min(ndata["Error"]), np.max(ndata["Error"]), colors="r", linestyles="dashed")
         else:
@@ -47,12 +47,18 @@ for n in ns:
         plt.title("Graph Compairing Computation Time and Error for N={0}".format(n))
         plt.ylabel("Error")
         plt.legend()
-    plt.show()
-    #plt.savefig("Results for N={0}".format(n))
+    
+    plt.figure(1)
+    plt.savefig("Plots/M v E Results for N={0}".format(n))
+    plt.close()
+    plt.figure(2)
+    plt.savefig("Plots/M v Comp time Results for N={0}".format(n)) 
+    plt.close()
+    plt.figure(3)
+    plt.savefig("Plots/Compt time v E Results for N={0}".format(n))
     plt.close()
 
 # %% Plotting time for error to be bellow given bound
-
 cut_data = data[data["Error"] < e_threshold]
 ns = cut_data["N"].unique()
 for method in cut_data["Method"].unique():
@@ -75,7 +81,7 @@ plt.legend()
 plt.title("A graph Showing the time to get below an error of {0} for different matrix sizes".format(e_threshold))
 plt.xlabel("N")
 plt.ylabel("Computation Time")
-plt.show()
+plt.savefig("Plots/time to get below an error of {0}.png".format(e_threshold))
 
 
 

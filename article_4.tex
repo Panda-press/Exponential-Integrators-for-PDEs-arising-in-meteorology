@@ -2,6 +2,9 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
 \begin{document}
 
 \title{Exponential Integrators for PDEs arising in meteorology} 
@@ -44,7 +47,47 @@ Various methods have been proposed for this such as by Al-Mohy, Awad H. and High
 Another class of methods known as Krylov subspace methods have gained traction recently\cite{Moler2003}.
 These work by projecting the problem onto a space with fewer dimensions (the kyrlov subspace), computing the matrix exponential and then transforming back to the original space.
 As the matrix exponential will be computed in the lower dimension kyrlov subspace the computation cost of this step will not be significant.
+\section{Krylov Subspace Methods}
+In this section, we will look into existing krylov subspace methods and then compare how these methods perform for approximating $e^{A}v$.
 
+\subsection{Alogrithms}
+Here we give the algorithms for the 2 krylov subspace methods we will be comparing.
+Each of these algorithms takes a matrix $A\in \mathbb{R}^{n\times n}$, a vector $v \in \mathbb{R}^n$ and an integer $m$ that determines the number of dimensions of the krylov subspace used.
+From these algorithms we will get a matrix $H \in \mathbb{R}^{m\times m}$ and another matrix $V \in \mathbb{R}^{n\times m}$ such that $A \approx VHV^T$ and $VV^T = I$.
+From here we can get $Av \approx VHV^Tv = VH||v||e_1$.
+
+\begin{algorithm}
+\caption{Arnoldi \cite{Fan2018}} %find better citation
+\begin{algorithmic}
+\Procedure{Arnoldi}{$A, \hat v_1,m$}
+\State $v_0 = 0$
+\For{$j = 1,2,...,m$}	
+\For{$i = 1,2,...,j$}
+\State$h_{ij} \gets v_i^T A v_i$
+\EndFor
+\State$\theta_j \gets Av_j - \sum^j_{i=1} h_{ij}v_i$
+\State$h_{j+1,j} \gets ||\theta_j||$
+\State$v_{j+1} \gets \theta_j/h_{j+1,j}$
+\EndFor
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+Here V is given by $v_1,...,v_m$ and H is give by $h_1,...,h_m$
+\begin{algorithm}
+\caption{Lanczos \cite{OJALVO1970}}
+\begin{algorithmic}
+\Procedure{Lanczos}{$A, \hat v_1,m$}
+\State $v_0 = 0$
+\For{$i \in \{1,2,...,m\}$}	
+\State$\beta_i \gets || \hat v_i ||$
+\State$v_i \gets \hat v_i / || \hat v_i ||$
+\State$\alpha_i = v_i^T A v_i$
+\State$\hat v_{i+1} = Av_i - \alpha_iv_i - \beta_iv_{i-1}$
+\EndFor
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}\\
+Here $V$ is given by ${v_1,...,v_m}$ and $H$ is tridiagonal with the leading diagonal being $\alpha_1, ..., \alpha_m$ and the upper and lower diagonals being $\beta_2,...,\beta_m$.
 \newpage
 \bibliographystyle{plain}
 \bibliography{References.bib}

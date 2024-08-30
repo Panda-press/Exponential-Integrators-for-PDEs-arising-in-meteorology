@@ -26,15 +26,15 @@ def GetA(n):
 methods = {
     "Scipy": lambda A, v, m: expm_multiply(A,v),
     "Arnoldi": ArnoldiExp,
-    "Lanzcos": LanzcosExp,
-    "NBLA": NBLAExp
+    "Lanzcos": LanzcosExp#,
+    #"NBLA": NBLAExp
 }
 m = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]
 n = [10,20,30,40,50,60,70,80,90,
      100,200,300,400,500,600,700,800,900,
      1000,2000,3000,4000,5000,6000,7000,8000,9000,
-     10000,#20000,30000,40000,50000,60000,70000,80000,90000,
-     100000,#200000,300000,400000,500000,600000,700000,800000,900000,
+     10000,20000,30000,40000,50000,60000,70000,80000,90000,
+     100000,200000,300000,400000,500000,600000,700000,800000,900000,
      1000000
      ]
 v = np.random.rand(np.max(n))
@@ -90,7 +90,7 @@ for index, row in data.iterrows():
         # Gets an average
         total_time = 0
         total_error = 0
-        count = 1
+        count = 10
         for i in range(count):
             start = time.time()
             result = method(A, V, M)
