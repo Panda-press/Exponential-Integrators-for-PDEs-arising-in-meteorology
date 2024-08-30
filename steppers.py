@@ -18,6 +18,7 @@ from ufl import ( TestFunction, TrialFunction, SpatialCoordinate, FacetNormal,
                   dx, ds, div, grad, dot, inner, conditional, as_vector,
                   exp, sin, pi )
 
+from scipy.sparse.linalg import expm_multiply
 # %% [markdown]
 #
 # Simple utility function to show the result of a simulation
@@ -212,6 +213,38 @@ class SIStepper(BaseStepper):
         sol_coeff[:],_ = cg(self.D, res_coeff, callback=lambda x: self.callback(x) ) # note that this assumes a symmetric D
         return {"iterations":0, "linIter":self.linIter}
 
+# %%
+# solve d_t u + N(u) = 0 using u^{n+1} = e^{-tau A^n}u^n - tau R^n(u^n)
+# with A^n = DN(u^n) and R^n(u^n) = N(u^n) - A^n u^n, i.e., rewritting
+# N(u) = DN(u)u + (N(u) - DN(u)u)
+# So in each step we need to solve
+# u^{n+1} = e^{-tau A^n}u^n - tau R^n(u^n)
+class ExponentialStepper(BaseStepper):
+    def __init__(self, N, method, method_name = ""):
+        BaseStepper.__init__(self,N, "explicit")  # quasiNewton computes D in 'setup'
+        self.name = "ExpInt{0}".format(method_name)
+        self.A = self.N.linear()
+        self.exp_v = method
+
+    def __call__(self, target, tau):
+        
+        self.setup(target, tau)
+        # get numpy vectors for target, residual, search direction
+        sol_coeff = target.as_numpy
+        res_coeff = self.res.as_numpy
+        self.linIter = 0
+
+        # Compute 
+        self.evalN(target,self.res)
+        # Compute e^{tau A^n}u^n
+        sol_coeff[:] = self.exp_v(-self.Minv @ self.A.as_numpy * tau, sol_coeff[:])
+        # Add R^n(u^n) = N(u^n) - A^n u^n
+        sol_coeff -= res_coeff[:] - tau * self.Minv @ self.A.as_numpy @ self.un.as_numpy[:]
+
+        
+        return {"iterations":0, "linIter":self.linIter}
+
+
 # %% [markdown]
 #
 # # Numerical experiment
@@ -252,8 +285,9 @@ op = galerkin(a-bf-bg, domainSpace=space, rangeSpace=space)
 # %%
 tauFE = 7e-5 # time step (FE fails with tau=8e-5 on the [80,80] grid)
 
-if False: # use FE
-    stepper = FEStepper(op)
+if True: # use FE
+    # stepper = FEStepper(op)
+    stepper = ExponentialStepper(op, method=expm_multiply, method_name="Scipy")
     tau = tauFE
 else:
     # stepper = BEStepper(op, method="Newton")
