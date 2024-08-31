@@ -5,6 +5,8 @@
 \usepackage{amssymb}
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
+\usepackage{graphicx}
+\usepackage{afterpage}
 \begin{document}
 
 \title{Exponential Integrators for PDEs arising in meteorology} 
@@ -72,11 +74,11 @@ From here we can get $Av \approx VHV^Tv = VH||v||e_1$.
 \EndProcedure
 \end{algorithmic}
 \end{algorithm}
-Here V is given by $v_1,...,v_m$ and H is give by $h_1,...,h_m$
+Here V is given by $v_1,...,v_m$ and H is give by $h_1,...,h_m$.\\
 \begin{algorithm}
 \caption{Lanczos \cite{OJALVO1970}}
 \begin{algorithmic}
-\Procedure{Lanczos}{$A, \hat v_1,m$}
+\Procedure{Lanczos}{$A$ symetric$, \hat v_1,m$}
 \State $v_0 = 0$
 \For{$i \in \{1,2,...,m\}$}	
 \State$\beta_i \gets || \hat v_i ||$
@@ -88,6 +90,59 @@ Here V is given by $v_1,...,v_m$ and H is give by $h_1,...,h_m$
 \end{algorithmic}
 \end{algorithm}\\
 Here $V$ is given by ${v_1,...,v_m}$ and $H$ is tridiagonal with the leading diagonal being $\alpha_1, ..., \alpha_m$ and the upper and lower diagonals being $\beta_2,...,\beta_m$.
+
+\subsection{Relevance To Matrix Exponentials}
+By using $A \approx VHV^T$ and the fact that $V^TV = I$ we can apply this to $e^A$ as follows:
+\begin{align*}
+e^A &= \sum^{\infty}_{i=0}\frac{A^i}{i\!}\\
+&= \sum^{\infty}_{i=0}\frac{(VHV^T)^i}{i\!} \\
+&= \sum^{\infty}_{i=0}\frac{VH^iV^T}{i\!} \\
+&\text {and then when computing $e^Av$ we get}\\
+e^Av &= (\sum^{\infty}_{i=0}\frac{VH^iV^T}{i\!})v \\
+&= \sum^{\infty}_{i=0}\frac{VH^iV^Tv}{i\!} \\
+&= \sum^{\infty}_{i=0}\frac{VH^ie_1}{i\!} \\
+&= V(\sum^{\infty}_{i=0}\frac{H^i}{i\!})e_1 \\
+&= Ve^He_1
+\end{align*}
+
+\subsection{Numerical Results}
+Here we run numerical experiments, computing $e^Av$ for a tridiagonal matrix $A$ of sizes $100,000$ and $1,000,000$. We will compare the methods with respect to computation time, error and size of the Kyrlov subspace.
+
+\begin{figure}
+
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/M v E Results for N=1000000.png}
+	  \label{fig:MEe7}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/M v Comp Time Results for N=1000000.png}
+	  \label{fig:MEe7}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/Comp Time v E Results for N=1000000.png}
+	  \label{fig:MEe7}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/M v E Results for N=100000.png}
+	  \label{fig:MEe6}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/M v Comp Time Results for N=100000.png}
+	  \label{fig:MEe6}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/Comp Time v E Results for N=100000.png}
+	  \label{fig:MEe6}
+    \end{minipage}
+These results show that the Lanzcos algorithm outperforms the Arnoldi algorithm in both convergence rate and computational time.
+\end{figure}
+
+\begin{figure}
+Below we compare the time required for the different algorithms to get below an error of $10^{10}$ when computing $e^Av$ for various matrix sizes.
+\includegraphics[width=\linewidth]{Plots/time to get below an error of 1e-10.png}
+\clearpage
+Again we continue to see that the Lanzcos algorithm outperforms the Arnodli algorithm.
+\end{figure}
+\clearpage
 \newpage
 \bibliographystyle{plain}
 \bibliography{References.bib}
