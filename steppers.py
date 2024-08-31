@@ -34,6 +34,7 @@ def printResult(method,error):
 #
 # Assume the non-linear operator is given by `N` so we are solving
 # $u_t + N[u] = 0$
+# 
 
 # %%
 class BaseStepper:
@@ -46,6 +47,9 @@ class BaseStepper:
         self.shape = (self.spc.size,self.spc.size)
 
         # inverse lumped mass matrix (see the explanation given in 'wave.py' tutorial example)
+        # u^n v dx = sum_j u^n_j phi_j phi_i dx = M u^n
+        # Mu^{n+1} = Mu^n - dt N(u^n) (for FE)
+        # u^{n+1} = u^n - dt M^{-1}N(u^n)
         M = galerkin(dot(u,v)*dx).linear().as_numpy
         Mdiag = M.sum(axis=1) # sum up the entries onto the diagonal
         self.Minv = diags( 1/Mdiag.A1, shape=self.shape )
@@ -84,6 +88,8 @@ class BaseStepper:
             self.D = self.DNapprox(self, u)
 
     # compute matrix D = tau M^{-1}DN[u] + I
+    # e.g. BE: u^{n+1} + tau M^{-1}N[u^{n+1}] = u^n
+    # lineaaized around u^n_k: (I + tau M^{-1}DN[u^n_k])u = u^n
     def matrix(self,u):
         self.N.jacobian(u,self.A)
         D = self.tau * self.Minv @ self.A.as_numpy
@@ -190,57 +196,65 @@ class BEStepper(BaseStepper):
 # So in each step we need to solve
 # ( I + tau A^n ) u^{n+1} = u^n - tau R^n(u^n)
 #                         = ( I + tau A^n) u^n - tau N(u^n)
+# u^{n+1} = u^n - tau ( I + tau A^n )^{-1} N(u^n)
 class SIStepper(BaseStepper):
     def __init__(self, N):
         BaseStepper.__init__(self,N, "quasiNewton")  # quasiNewton computes D in 'setup'
         self.name = "SI1"
 
-    def __call__(self, target, tau):
+    def explStep(self, target, tau):
         # this sets D = I + tau A^n and initialized u^n
         self.setup(target, tau)
         # get numpy vectors for target, residual, search direction
         sol_coeff = target.as_numpy
         res_coeff = self.res.as_numpy
-        d_coeff   = self.d.as_numpy
-        self.linIter = 0
 
         # compute N(u^n)
         self.evalN(target,self.res)
         # subtract Du^n
         res_coeff[:] -= self.D@sol_coeff
         res_coeff[:] *= -1
+
+    def __call__(self, target, tau):
+        self.explStep(target,tau)
+
+        sol_coeff = target.as_numpy
+        res_coeff = self.res.as_numpy
+        self.linIter = 0
         # solve linear system
         sol_coeff[:],_ = cg(self.D, res_coeff, callback=lambda x: self.callback(x) ) # note that this assumes a symmetric D
         return {"iterations":0, "linIter":self.linIter}
 
 # %%
-# solve d_t u + N(u) = 0 using u^{n+1} = e^{-tau A^n}u^n - tau R^n(u^n)
-# with A^n = DN(u^n) and R^n(u^n) = N(u^n) - A^n u^n, i.e., rewritting
-# N(u) = DN(u)u + (N(u) - DN(u)u)
-# So in each step we need to solve
-# u^{n+1} = e^{-tau A^n}u^n - tau R^n(u^n)
-class ExponentialStepper(BaseStepper):
-    def __init__(self, N, method, method_name = ""):
-        BaseStepper.__init__(self,N, "explicit")  # quasiNewton computes D in 'setup'
+# solve d_t u + N(u) = 0 using exponential integrator for d_t u + A^n u + R^n(u) = 0
+# with A^n = DN(u^n) and R^n(u) = N(u) - A^n u
+# Set v = e^{A^n(t-t^n)} u then
+# d_t v = e^{A^n(t-t^n)) A^n u + e^{A^n(t-t^n)} d_t u
+#       = e^{A^n(t-t^n)) A^n u - e^{A^n(t-t^n)} (A^n u + R^n(u))
+#       = - e^{A^n(t-t^n)) R^n(u)
+#       = - e^{A^n(t-t^n)) R^n( e^{-A^n(t-t^n)}v )
+# Then using FE:
+# v^{n+1} = v^n - tau R^n(v^n)
+# e^{A^n tau)u^{n+1} = u^n - tau R^n(u^n) since u(t^n) = v(t^n)
+# u^{n+1} = e^{-A^n tau} ( u^n - tau R^n(u^n) )
+#         = e^{-A^n tau} ( u^n - tau (N(u^n) - A^n u^n) )
+#         = e^{-A^n tau} ( (I + tau A^n)u^n - tau N(u^n) )
+class ExponentialStepper(SIStepper):
+    def __init__(self, N, method=expm_multiply, method_name = ""):
+        SIStepper.__init__(self,N)
         self.name = "ExpInt{0}".format(method_name)
-        self.A = self.N.linear()
         self.exp_v = method
 
     def __call__(self, target, tau):
-        
-        self.setup(target, tau)
-        # get numpy vectors for target, residual, search direction
+        # u^* = (I + tau A^n)u^n - tau N(u^n)
+        # Note: the call method on the base class calls 'setup' which computes the right A^n
+        self.explStep(target,tau)
         sol_coeff = target.as_numpy
         res_coeff = self.res.as_numpy
         self.linIter = 0
 
-        # Compute 
-        self.evalN(target,self.res)
-        # Compute e^{tau A^n}u^n
-        sol_coeff[:] = self.exp_v(-self.Minv @ self.A.as_numpy * tau, sol_coeff[:])
-        # Add R^n(u^n) = N(u^n) - A^n u^n
-        sol_coeff -= res_coeff[:] - tau * self.Minv @ self.A.as_numpy @ self.un.as_numpy[:]
-
+        # Compute e^{-tau A^n}u^*
+        sol_coeff[:] = self.exp_v(-self.Minv @ self.A.as_numpy * tau, res_coeff[:])
         
         return {"iterations":0, "linIter":self.linIter}
 
@@ -272,10 +286,14 @@ x,u,v,n = ( SpatialCoordinate(space), TrialFunction(space), TestFunction(space),
 exact = as_vector([ ( 1/2*(x[0]**2+x[1]**2) - 1/3*(x[0]**3 - x[1]**3) + 1 ) *
                     ( 1.5+sin(5*pi*(x[0]+x[1])) ) ])
 
-a  = ( inner(grad(u),grad(v)) + (1+dot(u,u))*dot(u,v) ) * dx
-bf = (-div(grad(exact[0])) + (1+exact[0]**2)*exact[0]) * v[0] * dx
+# f = - laplace u      and grad(u).n = grad(exact).n on the boundary and f = - laplace(exact)
+# fv dx = - laplace u v dx = grad(u).grad(v) dx - grad(u).n v ds
+# grad(u).grad(v) dx - (-laplace exact)v dx - grad(exact).n v ds = 0
+
+a  = ( inner(grad(u),grad(v)) ) * dx # + (1+dot(u,u))*dot(u,v) ) * dx
+bf = (-div(grad(exact[0])) ) * v[0] * dx # + (1+exact[0]**2)*exact[0]) * v[0] * dx
 bg = dot(grad(exact[0]),n)*v[0]*ds
-op = galerkin(a-bf-bg, domainSpace=space, rangeSpace=space)
+op = galerkin(a-bf-bg)
 
 # %% [markdown]
 #
@@ -285,17 +303,17 @@ op = galerkin(a-bf-bg, domainSpace=space, rangeSpace=space)
 # %%
 tauFE = 7e-5 # time step (FE fails with tau=8e-5 on the [80,80] grid)
 
-if True: # use FE
+if False: # use FE
     # stepper = FEStepper(op)
-    stepper = ExponentialStepper(op, method=expm_multiply, method_name="Scipy")
     tau = tauFE
 else:
-    # stepper = BEStepper(op, method="Newton")
-    stepper = SIStepper(op)
-    tau = tauFE*10000
+    stepper = BEStepper(op, method="Newton")
+    # stepper = SIStepper(op)
+    # stepper = ExponentialStepper(op, method=expm_multiply, method_name="Scipy")
+    tau = tauFE*100 # *100 # *10000
 
 # initial condition
-u_h.interpolate( 1.5 )
+u_h.interpolate( exact )
 upd = u_h.copy()
 
 # time loop
@@ -314,6 +332,7 @@ while True:
     # we expect u^n -> exact for n->infty, i.e., u' -> 0
     # so we stop if upd = u^n - u^{n+1} is small
     upd.as_numpy[:] -= u_h.as_numpy[:]
+    upd.plot()
     update = np.sqrt( np.dot(upd.as_numpy,upd.as_numpy) )
     print(f"time step {n}, time {time}, N {stepper.countN}, iterations {info}, update {update}")
     if update < check:
