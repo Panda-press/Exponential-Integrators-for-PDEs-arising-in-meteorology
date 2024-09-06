@@ -5,6 +5,8 @@
 # ## Setup
 
 # %%
+import sys
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.sparse.linalg import cg, LinearOperator
@@ -290,8 +292,8 @@ exact = as_vector([ ( 1/2*(x[0]**2+x[1]**2) - 1/3*(x[0]**3 - x[1]**3) + 1 ) *
 # fv dx = - laplace u v dx = grad(u).grad(v) dx - grad(u).n v ds
 # grad(u).grad(v) dx - (-laplace exact)v dx - grad(exact).n v ds = 0
 
-a  = ( inner(grad(u),grad(v)) ) * dx # + (1+dot(u,u))*dot(u,v) ) * dx
-bf = (-div(grad(exact[0])) ) * v[0] * dx # + (1+exact[0]**2)*exact[0]) * v[0] * dx
+a  = (( inner(grad(u),grad(v)) ) + (1+dot(u,u))*dot(u,v) ) * dx
+bf = ((-div(grad(exact[0])) ) + (1+exact[0]**2)*exact[0]) * v[0] * dx
 bg = dot(grad(exact[0]),n)*v[0]*ds
 op = galerkin(a-bf-bg)
 
@@ -303,14 +305,12 @@ op = galerkin(a-bf-bg)
 # %%
 tauFE = 7e-5 # time step (FE fails with tau=8e-5 on the [80,80] grid)
 
-if False: # use FE
-    # stepper = FEStepper(op)
-    tau = tauFE
-else:
-    stepper = BEStepper(op, method="Newton")
-    # stepper = SIStepper(op)
-    # stepper = ExponentialStepper(op, method=expm_multiply, method_name="Scipy")
-    tau = tauFE*100 # *100 # *10000
+steppersDict = {"FE": (FEStepper(op), tauFE),
+                "BE": (BEStepper(op, method="Newton"), tauFE*100),
+                "SI": (SIStepper(op), tauFE*100),
+                "EXPSCI": (ExponentialStepper(op, method=expm_multiply, method_name="Scipy"), tauFE*1)}
+
+stepper, tau = steppersDict[sys.argv[1]]
 
 # initial condition
 u_h.interpolate( exact )
@@ -332,7 +332,7 @@ while True:
     # we expect u^n -> exact for n->infty, i.e., u' -> 0
     # so we stop if upd = u^n - u^{n+1} is small
     upd.as_numpy[:] -= u_h.as_numpy[:]
-    upd.plot()
+    #upd.plot()
     update = np.sqrt( np.dot(upd.as_numpy,upd.as_numpy) )
     print(f"time step {n}, time {time}, N {stepper.countN}, iterations {info}, update {update}")
     if update < check:
