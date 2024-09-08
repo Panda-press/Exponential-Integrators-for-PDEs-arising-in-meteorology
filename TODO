@@ -1,0 +1,20 @@
+- how to fix 'm' depending on solution (adaptive choice)
+- higher order method
+- adaptivity
+
+- Parabolic problems
+  https://arxiv.org/pdf/2209.11922
+- compressible flow problem
+  https://www.sciencedirect.com/science/article/abs/pii/S0021999118301803
+- KIOPS and BAMPHI
+  https://www.sciencedirect.com/science/article/abs/pii/S0377042722005714
+- performance improvements
+
+- (semi) implicit methods?
+
+-----------------------
+
+- instead of setting R(u) = N(u) - Au how about
+                     R(u) = N(u) - A^mu where A^m is the approximate matrix
+                     constructed for the exponential integrator, i.e., the
+                     matrix used to compute exp(A^m)

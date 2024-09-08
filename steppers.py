@@ -17,16 +17,20 @@ from scipy.sparse.linalg import expm_multiply
 import random
 
 from Stable_Lanzcos import LanzcosExp
-expm_lanzcos = lambda A,x: LanzcosExp(A,x,5)
+expm_lanzcos = [lambda A,x: LanzcosExp(A,x,5),"Lanzcos"]
+from NBLA import NBLAExp
+expm_nbla = [lambda A,x: NBLAExp(A,x,5),"NBLA"]
+from Arnoldi import ArnoldiExp 
+expm_arnoldi = [lambda A,x: ArnoldiExp(A,x,5),"Arnoldi"]
+from kiops import KiopsExp
+expm_kiops = [lambda A,x: KiopsExp(A,x),"Kiops"]
 
 from dune.grid import structuredGrid as leafGridView
 from dune.fem.space import lagrange
 from dune.fem import integrate
 from dune.fem.operator import galerkin
-from dune.ufl import Constant
-from ufl import ( TestFunction, TrialFunction, SpatialCoordinate, FacetNormal,
-                  dx, ds, div, grad, dot, inner, conditional, as_vector,
-                  exp, sin, cos, pi )
+from dune.fem.function import gridFunction
+from ufl import dx, dot, inner, grad, TestFunction, TrialFunction
 
 # %% [markdown]
 #
@@ -48,7 +52,8 @@ def printResult(time,error,*args):
 # %%
 class BaseStepper:
     # method is 'explicit', 'approx', 'exact'
-    def __init__(self, N, method="explicit"):
+    # mass is 'lumped', 'exact', 'identitiy'
+    def __init__(self, N, *, method="explicit", mass="lumped"):
         self.N = N
         self.method = method
         self.spc = N.domainSpace
@@ -56,13 +61,24 @@ class BaseStepper:
         self.res = self.un.copy()       # residual
         self.shape = (self.spc.size,self.spc.size)
 
-        # inverse lumped mass matrix (see the explanation given in 'wave.py' tutorial example)
-        # u^n v dx = sum_j u^n_j phi_j phi_i dx = M u^n
-        # Mu^{n+1} = Mu^n - dt N(u^n) (for FE)
-        # u^{n+1} = u^n - dt M^{-1}N(u^n)
-        M = galerkin(dot(u,v)*dx).linear().as_numpy
-        Mdiag = M.sum(axis=1) # sum up the entries onto the diagonal
-        self.Minv = diags( 1/Mdiag.A1, shape=self.shape )
+        if mass == 'identity':
+            # This is hack!
+            # Issue: the dgoperator is set to be on the right so we need
+            # the action of -N. Since this is the only operator corrently
+            # using the identity mass matrix we change the sign here
+            # NEEDS FIXING
+            self.Minv = -identity(self.shape[0]) 
+        else:
+            # inverse (lumped) mass matrix (see the explanation given in 'wave.py' tutorial example)
+            # u^n v dx = sum_j u^n_j phi_j phi_i dx = M u^n
+            # Mu^{n+1} = Mu^n - dt N(u^n) (for FE)
+            # u^{n+1} = u^n - dt M^{-1}N(u^n)
+            # bug: u,v = TrialFunction(N.domainSpace), TestFunction(N.rangeSpace)
+            u,v = TrialFunction(N.domainSpace.as_ufl()), TestFunction(N.rangeSpace.as_ufl())
+            M = galerkin(dot(u,v)*dx).linear().as_numpy
+            if mass == 'lumped':
+                Mdiag = M.sum(axis=1) # sum up the entries onto the diagonal
+                self.Minv = diags( 1/Mdiag.A1, shape=self.shape )
 
         # time step to use
         self.tau = None
@@ -99,7 +115,7 @@ class BaseStepper:
             self.D = aslinearoperator(self.Dapprox(self, u))
             # self.test(u)
         else:
-            assert False # we are not considering 'exact' at the moment
+            # assert False # we are not considering 'exact' at the moment
             self.N.jacobian(u,self.Nprime)
             self.A = self.tau * self.Minv @ self.Nprime.as_numpy
             self.D = self.A + self.I
@@ -179,8 +195,8 @@ class BaseStepper:
 # ## Forward Euler method
 # solve d_t u + N(u) = 0 using u^{n+1} = u^n - tau N(u^n)
 class FEStepper(BaseStepper):
-    def __init__(self, N):
-        BaseStepper.__init__(self,N,"explicit")
+    def __init__(self, N, *, mass='lumped'):
+        BaseStepper.__init__(self,N, method="explicit", mass=mass)
         self.name = "FE"
 
     def __call__(self, target, tau):
@@ -192,25 +208,30 @@ class FEStepper(BaseStepper):
 # ## Backward Euler method
 # solve d_t u + N(u) = 0 using u^{n+1} = u^n - tau N(u^{n+1})
 class BEStepper(BaseStepper):
-    def __init__(self, N, method="approx"):
-        BaseStepper.__init__(self,N,method)
+    def __init__(self, N, *, method="approx", mass='lumped',
+                 ftol=1e-6, verbose=True):
+        BaseStepper.__init__(self,N, method=method, mass=mass)
         self.name = f"BE({method})"
+        self.verbose = self.callback if verbose else None
+        self.ftol = ftol
 
     # non linear function (non-linear problem want f(x)=0)
     def f(self, x):
         return self.evalN(x) + ( x - self.un.as_numpy )
-    def callback(self,x): 
-        y = self.f(x)
-        y = self.D@x - self.res.as_numpy
-        print(self.linIter,y.dot(y), self.countN)
+    def callback(self,x,Fx): 
+        print(self.countN, max(abs(Fx)))
         self.linIter += 1
 
-
     def __call__(self, target, tau):
+        try:
+            self.N.model.sourceTime += time.value
+        except AttributeError:
+            pass
         self.setup(target,tau)
         # get numpy vectors for target, residual, search direction
         sol_coeff = target.as_numpy
-        sol_coeff[:] = newton_krylov(self.f, xin=sol_coeff, f_tol=1e-6)
+        sol_coeff[:] = newton_krylov(self.f, xin=sol_coeff, f_tol=self.ftol,
+                                     callback=self.verbose)
         return {"iterations":0, "linIter":self.linIter}
 
 # %% [markdown]
@@ -223,8 +244,8 @@ class BEStepper(BaseStepper):
 #                         = ( I + tau A^n ) u^n - tau N(u^n)
 # u^{n+1} = u^n - tau ( I + tau A^n )^{-1} N(u^n)
 class SIStepper(BaseStepper):
-    def __init__(self, N, method="approx"):
-        BaseStepper.__init__(self,N, method)  # quasiNewton computes D in 'setup'
+    def __init__(self, N, *, method="approx", mass='lumped'):
+        BaseStepper.__init__(self,N, method=method, mass=mass)
         self.name = f"SI({method})"
 
     def explStep(self, target, tau):
@@ -250,15 +271,15 @@ class SIStepper(BaseStepper):
         self.linIter = 0
         # solve linear system
         sol_coeff[:],_ = lgmres(self.D, res_coeff, # x0=self.un.as_numpy,
-                                rtol=1e-4,
+                                rtol=1e-2,
                                 # callback=lambda x: self.callback(x),
                                 # callback_type='x'
                                )
         return {"iterations":0, "linIter":self.linIter}
 
 # %%
-# solve d_t u + N(u) = 0 using exponential integrator for d_t u + A^n u + R^n(u) = 0
-# with A^n = DN(u^n) and R^n(u) = N(u) - A^n u
+# solve d_t u + N(u) = 0 using exponential integrator for
+# d_t u + A^n u + R^n(u) = 0 with A^n = DN(u^n) and R^n(u) = N(u) - A^n u
 # Set v = e^{A^n(t-t^n)} u then
 # d_t v = e^{A^n(t-t^n)) A^n u + e^{A^n(t-t^n)} d_t u
 #       = e^{A^n(t-t^n)) A^n u - e^{A^n(t-t^n)} (A^n u + R^n(u))
@@ -270,11 +291,12 @@ class SIStepper(BaseStepper):
 # u^{n+1} = e^{-A^n tau} ( u^n - tau R^n(u^n) )
 #         = e^{-A^n tau} ( u^n - tau (N(u^n) - A^n u^n) )
 #         = e^{-A^n tau} ( (I + tau A^n)u^n - tau N(u^n) )
+
 class ExponentialStepper(SIStepper):
-    def __init__(self, N, exp_v, method_name, method='approx'):
-        SIStepper.__init__(self,N,method)
-        self.name = f"ExpInt({method},{method_name})"
-        self.exp_v = exp_v
+    def __init__(self, N, exp_v, *, method='approx', mass='lumped'):
+        SIStepper.__init__(self,N, method=method, mass=mass)
+        self.name = f"ExpInt({method},{exp_v[1]})"
+        self.exp_v = exp_v[0]
 
     def __call__(self, target, tau):
         # u^* = (I + tau A^n)u^n - tau N(u^n)
@@ -284,90 +306,100 @@ class ExponentialStepper(SIStepper):
         target.as_numpy[:] = self.exp_v(- self.A, self.res.as_numpy)
         return {"iterations":0, "linIter":0}
 
+if __name__ == "__main__":
+    # # Numerical experiment
+    if False:
+        from parabolicTest import dimR, time, sourceTime, domain
+        from parabolicTest import paraTest1 as problem
+    else:
+        from allenCahn import dimR, time, sourceTime, domain
+        from allenCahn import test2 as problem
 
-# %% [markdown]
-#
-# # Numerical experiment
-#
-# ## Setup grid and space
-#
+    # ## Setup grid, space, and operator
 
-# %%
-dimR = 1
-order = 1
-domain = [0, 0], [1, 1], [80, 80]
+    # %%
+    gridView = leafGridView(*domain)
 
-gridView = leafGridView(*domain)
-space = lagrange(gridView, order=order, dimRange=dimR)
-u_h = space.interpolate(0, name='u_h')
+    space = lagrange(gridView, order=1, dimRange=dimR)
 
-# %% [markdown]
-#
-# ## Setup operator
-#
+    model, T, u0, exact = problem(gridView)
 
-# %%
-x,u,v,n = ( SpatialCoordinate(space), TrialFunction(space), TestFunction(space), FacetNormal(space) )
-time = Constant(0,"time")
-sourceTime = Constant(0,"sourceTime")
+    # %% [markdown]
+    #
+    # ## Time loop
+    #
 
-xExact = as_vector([ cos(2*pi*x[0]) ])
-exact = lambda t: exp(-(2*pi)**2*t)*xExact
-dtExact = lambda t: -(2*pi)**2*exp(-(2*pi)**2*t)*xExact
+    # %%
+    factor = float(sys.argv[2])
+    # tauFE = 7e-5 # parabolic?
+    tauFE = 0.05   # AC?
 
-# exact = lambda t: cos(2*pi*t)*xExact
-# dtExact = lambda t: -2*pi*sin(2*pi*t)*xExact
-
-a  = ( inner(grad(u),grad(v)) + (1+dot(u,u))*dot(u,v) ) * dx
-bf = lambda t: ( dtExact(t)[0] - div(grad(exact(t)[0]))
-                 + (1+exact(t)[0]**2)*exact(t)[0]
-               ) * v[0] * dx
-bg = lambda t: dot(grad(exact(t)[0]),n)*v[0]*ds
-op = galerkin(a-bf(sourceTime)-bg(sourceTime))
-
-# %% [markdown]
-#
-# ## Time loop
-#
-
-# %%
-factor = 100
-tauFE = 7e-5 # time step (FE fails with tau=8e-5 on the [80,80] grid)
-
-steppersDict = {"FE": (FEStepper(op), tauFE),
-                "BE": (BEStepper(op), tauFE*factor),
-                "SI": (SIStepper(op), tauFE*factor),
-                "EXPSCI": (ExponentialStepper(op,
-                           exp_v=expm_multiply, method_name="Scipy"),
+    steppersDict = {"FE": (FEStepper,{},
                            tauFE*factor),
-                "EXPLAN": (ExponentialStepper(op,
-                           exp_v=expm_lanzcos, method_name="Lanzcos"),
+                    "BE": (BEStepper,{},
                            tauFE*factor),
-               }
-stepper, tau = steppersDict[sys.argv[1]]
+                    "SI": (SIStepper,{},
+                           tauFE*factor),
+                    "EXPSCI": (ExponentialStepper, {"exp_v":expm_multiply},
+                               tauFE*factor),
+                    "EXPLAN": (ExponentialStepper, {"exp_v":expm_lanzcos},
+                               tauFE*factor),
+                    "EXPNBLA": (ExponentialStepper, {"exp_v":expm_nbla},
+                                tauFE*factor),
+                    "EXPARN": (ExponentialStepper, {"exp_v":expm_arnoldi},
+                               tauFE*factor),
+                    "EXPKIOPS": (ExponentialStepper, {"exp_v":expm_kiops},
+                                 tauFE*factor),
+                   }
+    stepperFct, args, tau = steppersDict[sys.argv[1]]
 
-# initial condition
-u_h.interpolate( exact(time) )
+    # refinement
+    level = int(sys.argv[3])
+    gridView.hierarchicalGrid.globalRefine(level)
 
-# time loop
-n = 0
-totalIter, linIter = 0, 0
-run = []
-checkTime = factor*tauFE
-printResult(time.value,u_h-exact(time))
-while time.value < 0.5:
-    # this actually depends probably on the method we use, i.e., BE would
-    # be + tau and the others without
-    sourceTime.value = time.value # + tau
-    info = stepper(target=u_h, tau=tau)
-    assert not np.isnan(u_h.as_numpy).any()
-    time.value += tau
-    totalIter += info["iterations"]
-    linIter   += info["linIter"]
-    n += 1
-    if time.value >= checkTime:
-        print(f"time step {n}, time {time.value}, N {stepper.countN}, iterations {info}")
-        printResult(time.value,u_h-exact(time),stepper.countN)
-        run += [(stepper.countN,linIter)]
-        checkTime += factor*tauFE
-        # u_h.plot()
+    outputName = lambda n: f"allenCahn_{level}{sys.argv[1]}_{factor}_{n}.png"
+
+    # initial condition
+    u_h = space.interpolate(u0, name='u_h')
+
+    # stepper
+    op = galerkin(model, domainSpace=space, rangeSpace=space)
+    stepper = stepperFct(N=op,**args)
+
+    # time loop
+    n = 0
+    totalIter, linIter = 0, 0
+    run = []
+    checkTime = 128*tauFE
+    fileCount = 0
+    if exact is not None:
+        printResult(time.value,u_h-exact(time))
+
+    u_h.plot(gridLines=None, block=False)
+    plt.savefig(outputName(fileCount))
+    fileCount += 1
+
+    while time.value < T:
+        # this actually depends probably on the method we use, i.e., BE would
+        # be + tau and the others without
+        sourceTime.value = time.value
+        info = stepper(target=u_h, tau=tau)
+        assert not np.isnan(u_h.as_numpy).any()
+        time.value += tau
+        totalIter += info["iterations"]
+        linIter   += info["linIter"]
+        n += 1
+        if time.value >= checkTime:
+            print(f"[{fileCount}]: time step {n}, time {time.value}, N {stepper.countN}, iterations {info}")
+            if exact is not None:
+                printResult(time.value,u_h-exact(time),stepper.countN)
+            run += [(stepper.countN,linIter)]
+            checkTime += 128*tauFE
+            u_h.plot(gridLines=None, block=False)
+            plt.savefig(outputName(fileCount))
+            fileCount += 1
+
+    print(f"Final time step {n}, time {time.value}, N {stepper.countN}, iterations {info}")
+    u_h.plot(gridLines=None, block=False)
+    plt.savefig(outputName(fileCount))
+
