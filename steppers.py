@@ -17,7 +17,7 @@ from scipy.sparse.linalg import expm_multiply
 import random
 
 from Stable_Lanzcos import LanzcosExp
-expm_lanzcos = [lambda A,x: LanzcosExp(A,x,m),"Lanzcos"]
+expm_lanzcos = [lambda A,x,m: LanzcosExp(A,x,m),"Lanzcos"]
 from NBLA import NBLAExp
 expm_nbla = [lambda A,x,m: NBLAExp(A,x.m),"NBLA"]
 from Arnoldi import ArnoldiExp 
@@ -299,18 +299,18 @@ class SIStepper(BaseStepper):
 #         = e^{-A^n tau} ( (I + tau A^n)u^n - tau N(u^n) )
 
 class ExponentialStepper(SIStepper):
-    def __init__(self, N, exp_v, *, exp_args, method='approx', mass='lumped'):
+    def __init__(self, N, exp_v, *, expv_args, method='approx', mass='lumped'):
         SIStepper.__init__(self,N, method=method, mass=mass)
         self.name = f"ExpInt({method},{exp_v[1]})"
         self.exp_v = exp_v[0]
-        self.exp_args = exp_args
+        self.expv_args = expv_args
 
     def __call__(self, target, tau):
         # u^* = (I + tau A^n)u^n - tau N(u^n)
         # Note: the call method on the base class calls 'setup' which computes the right A^n
         self.explStep(target,tau)
         # Compute e^{-tau A^n}u^*
-        target.as_numpy[:] = self.exp_v(- self.A, self.res.as_numpy, **self.exp_args)
+        target.as_numpy[:] = self.exp_v(- self.A, self.res.as_numpy, **self.expv_args)
         return {"iterations":0, "linIter":0}
 
 steppersDict = {"FE": (FEStepper,{}),
@@ -350,9 +350,9 @@ if __name__ == "__main__":
     # %%
     stepperFct, args = steppersDict[sys.argv[1]]
     if len(sys.argv) >= 5:
-        if exp_v in args.keys():
+        if "exp_v" in args.keys():
             m = int(sys.argv[4])
-            exp_v["m"] = m
+            args["expv_args"] = {"m":m}
 
     factor = float(sys.argv[2])
     tau = tauFE * factor

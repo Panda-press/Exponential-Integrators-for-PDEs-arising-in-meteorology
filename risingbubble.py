@@ -67,7 +67,7 @@ from steppers import steppersDict
 
 if __name__ == "__main__":
     stepperFct, args = steppersDict[sys.argv[1]]
-    if len(sys.argv) > 2:
+    if len(sys.argv) >= 3:
         cfl = int(sys.argv[2])
         outputName = lambda n: f"risingbubble_{sys.argv[1]}{cfl}_{n}"
     else:
@@ -91,6 +91,11 @@ if __name__ == "__main__":
                       threading=True,
                       defaultQuadrature=True)
     op = femDGOperator(models, space, **operator_kwargs)
+
+    if len(sys.argv) >= 4:
+        if "exp_v" in args.keys():
+            m = int(sys.argv[3])
+            args["expv_args"] = {"m":m}
 
     stepper = stepperFct(op, mass='identity', **args)
 
