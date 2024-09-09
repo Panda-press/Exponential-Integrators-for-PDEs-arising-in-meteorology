@@ -63,19 +63,9 @@ from dune.grid import structuredGrid
 from dune.fem.space import dglagrange, finiteVolume
 from dune.femdg import femDGModels, femDGOperator, advectionNumericalFlux
 from dune.femdg.rk import femdgStepper
-from steppers import BEStepper, FEStepper, ExponentialStepper, SIStepper
-from steppers import expm_kiops, expm_lanzcos, expm_nbla, expm_arnoldi, expm_multiply
+from steppers import steppersDict
 
 if __name__ == "__main__":
-    steppersDict = {"FE": (FEStepper,{}),
-                    "BE": (BEStepper,{"ftol":1e-3,"verbose":False}),
-                    "SI": (SIStepper,{}),
-                    "EXPSCI": (ExponentialStepper, {"exp_v":expm_multiply}),
-                    "EXPLAN": (ExponentialStepper, {"exp_v":expm_lanzcos}),
-                    "EXPNBLA": (ExponentialStepper, {"exp_v":expm_nbla}),
-                    "EXPARN": (ExponentialStepper, {"exp_v":expm_arnoldi}),
-                    "EXPKIOPS": (ExponentialStepper, {"exp_v":expm_kiops}),
-                   }
     stepperFct, args = steppersDict[sys.argv[1]]
     if len(sys.argv) > 2:
         cfl = int(sys.argv[2])
@@ -108,34 +98,33 @@ if __name__ == "__main__":
     info = stepper(target=u_h, tau=1e-5)
     u_h.interpolate(Model.U0)
 
-    # stepper = femdgStepper(order=1, operator=op)
-
     # time loop
     # figure out a first tau
 
     t = 0
     n = 0
+    fileCount = 0
     plotTime = 0.5
     nextTime = 0.5
 
     u_h.plot(gridLines=None, block=False)
-    plt.savefig(outputName(n))
+    plt.savefig(outputName(fileCount))
+    fileCount += 1
 
     while t < 400:
         op.setTime(t)
         tau = op.localTimeStepEstimate[0]*cfl
-
-        """
-        t += stepper(u_h)
-        """
         info = stepper(target=u_h, tau=tau)
         t += tau
 
         assert not np.isnan(u_h.as_numpy).any()
         n += 1
         print(f"time step {n}, time {t}, tau {tau}, calls {op.info()}")
-        if t>plotTime:
+        if True: # t>plotTime:
             u_h.plot(gridLines=None, block=False)
-            plt.savefig(outputName(n))
+            plt.savefig(outputName(fileCount))
+            fileCount += 1
             plt.close()
             plotTime += nextTime
+
+    plt.savefig(outputName(fileCount))
