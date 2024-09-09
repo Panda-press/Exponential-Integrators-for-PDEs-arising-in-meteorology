@@ -1,20 +1,34 @@
-- how to fix 'm' depending on solution (adaptive choice)
-- higher order method
-- adaptivity
-
-- Parabolic problems
-  https://arxiv.org/pdf/2209.11922
-- compressible flow problem
-  https://www.sciencedirect.com/science/article/abs/pii/S0021999118301803
-- KIOPS and BAMPHI
+New directions:
+- understanding KIOPS and BAMPHI
   https://www.sciencedirect.com/science/article/abs/pii/S0377042722005714
-- performance improvements
-
-- (semi) implicit methods?
-
------------------------
+- implement BAMPHI
+- how to fix 'm' depending on solution (adaptive choice)
+- predictor-corrector with expm-be
+- higher order ODE methods
+- grid adaptivity
 
 - instead of setting R(u) = N(u) - Au how about
                      R(u) = N(u) - A^mu where A^m is the approximate matrix
                      constructed for the exponential integrator, i.e., the
                      matrix used to compute exp(A^m)
+
+- Parabolic problems
+  https://arxiv.org/pdf/2209.11922
+- compressible flow problem
+  https://www.sciencedirect.com/science/article/abs/pii/S0021999118301803
+
+- general performance improvements, e.g., exp_multiply with tridiagonal matrix
+- (semi) implicit methods?
+
+-----------------------
+
+Report:
+- explain how the number of matrix vector multiplications with 'A' scale
+  with m for the different problems - it seems not to be linear?
+- do an experiment with an approximate Jacobian, i.e., take one of the
+  PDE test cases (e.g. Allen-Cahn) and run similar experiments as you have shown for the
+  FD code using the exact Jacobian and an approximate Jacobian.
+- how do the graphs scale with h, i.e., the grid spacing?
+  Your example is not the right one - when increasing N you should get a
+  matrix which is worse conditioned
+- explain issues with finite-element method, i.e., the mass matrix
