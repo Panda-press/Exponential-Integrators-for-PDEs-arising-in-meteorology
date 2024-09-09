@@ -15,10 +15,12 @@ eps = Constant(0.01,"eps")
 theta = Constant(0.8,"theta")
 theta_c = Constant(1.6,"theta_c")
 
+"""
 a = ( eps**2 * inner(grad(u),grad(v))
       - theta/2 * ln( (1-u[0])/(1+u[0]) ) * v[0]
       - theta_c * dot(u,v)
     ) * dx
+"""
 
 a = ( eps**2 * inner(grad(u),grad(v))
       + (dot(u,u)-1) * dot(u,v)

@@ -18,7 +18,7 @@ def model(exact,dtExact,nonLinear):
     return a-bf(sourceTime)-bg(sourceTime)
 
 def paraTest0(gridView):
-    freq = 2*pi
+    freq = 6*pi
     xExact = as_vector([ cos(freq*x[0]) ])
     exact = lambda t: exp(-freq**2*t) * xExact
     dtExact = lambda t: -freq**2*exp(-freq**2*t) * xExact
@@ -32,8 +32,8 @@ def paraTest1(gridView):
     return model(exact,dtExact, lambda u: (1+dot(u,u))*u), 0.5, exact(0), exact
 
 def paraTest2(gridView):
-    freq = 2*pi
+    freq = 6*pi
     xExact = as_vector([ cos(freq*x[0]) ])
-    exact = lambda t: exp(-freq**2*t) * xExact
-    dtExact = lambda t: -freq**2*exp(-freq**2*t) * xExact
+    exact = lambda t: cos(freq**2*t) * xExact
+    dtExact = lambda t: -freq**2*sin(freq**2*t) * xExact
     return model(exact,dtExact, lambda u: (1+dot(u,u))*u), 0.5, exact(time), exact
