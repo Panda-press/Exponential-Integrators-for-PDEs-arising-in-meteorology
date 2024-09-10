@@ -7,9 +7,8 @@ import pickle as pickle
 e_threshold = 1e-10
 
 # %%
-with open("Experiment_Data.pickle", "rb") as file:
-    data = pickle.load(file)
-ns = [1000, 10000, 100000,1000000]
+data = pd.read_csv("Experiment_Data.csv")
+ns = data["N"].unique()
 # %%
 for n in ns:
     ndata = data[data["N"] == n]
