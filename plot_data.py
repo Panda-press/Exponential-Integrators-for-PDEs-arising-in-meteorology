@@ -29,7 +29,7 @@ for n in ns:
         plt.figure(2)
         if method == "Scipy":
             mean_computation_time = np.mean(methoddata["Computation Time"])
-            plt.hlines(mean_computation_time, np.min(ndata["M"]), np.max(ndata["M"]), colors="r", linestyles="dashed")
+            plt.hlines(mean_computation_time, np.min(ndata["M"]), np.max(ndata["M"]), colors="r", linestyles="dashed", label="Scipy")
         else:
             plt.loglog(methoddata["M"], methoddata["Computation Time"], label= method)
         plt.xlabel("M")
@@ -39,7 +39,7 @@ for n in ns:
         
         plt.figure(3)
         if method == "Scipy":
-            plt.vlines(mean_computation_time, np.min(ndata["Error"]), np.max(ndata["Error"]), colors="r", linestyles="dashed")
+            plt.vlines(mean_computation_time, np.min(ndata["Error"]), np.max(ndata["Error"]), colors="r", linestyles="dashed", label="Scipy")
         else:
             plt.loglog(methoddata["Computation Time"], methoddata["Error"], label= method)
         plt.xlabel("Computation Time $s$")
