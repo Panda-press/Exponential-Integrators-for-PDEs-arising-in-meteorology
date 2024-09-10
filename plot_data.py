@@ -21,7 +21,7 @@ for n in ns:
             mean_Error = np.mean(methoddata["Error"])
         else:
             plt.loglog(methoddata["M"], methoddata["Error"], label= method)
-        plt.xlabel("M")
+        plt.xlabel("Dimention of Kyrlov subspace $m$")
         plt.ylabel("Error")
         plt.title("Graph Compairing M and Error for N={0}".format(n))
         plt.legend()
@@ -32,7 +32,7 @@ for n in ns:
             plt.hlines(mean_computation_time, np.min(ndata["M"]), np.max(ndata["M"]), colors="r", linestyles="dashed", label="Scipy")
         else:
             plt.loglog(methoddata["M"], methoddata["Computation Time"], label= method)
-        plt.xlabel("M")
+        plt.xlabel("Dimention of Kyrlov subspace $m$")
         plt.ylabel("Computation Time $s$")
         plt.title("Graph Compairing M and Computation Time for N={0}".format(n))
         plt.legend()
