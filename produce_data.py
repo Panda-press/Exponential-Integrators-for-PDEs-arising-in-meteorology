@@ -21,7 +21,7 @@ from NBLA import NBLAExp
 def GetA(n):
     A = diags([-1,2,-1], [-1,0,1], shape=(n,n))
     A = csc_matrix(A)
-    return A
+    return A * n**2
 
 methods = {
     "Scipy": lambda A, v, m: expm_multiply(A,v),
