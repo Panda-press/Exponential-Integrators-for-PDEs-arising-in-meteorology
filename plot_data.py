@@ -60,13 +60,12 @@ for n in ns:
 # %% Plotting time for error to be bellow given bound
 cut_data = data[data["Error"] < e_threshold]
 ns = cut_data["N"].unique()
-for method in cut_data["Method"].unique():
+for method in data["Method"].unique():
     method_data = cut_data[cut_data["Method"] == method]
     result = []
     for n in ns:
         ndata = method_data[method_data["N"] == n]
         if method == "Scipy":
-            #result.append(ndata["Computation Time"].mean())
             continue
         try:
             result.append(ndata["Computation Time"].to_list()[ndata["Error"].argmin()])

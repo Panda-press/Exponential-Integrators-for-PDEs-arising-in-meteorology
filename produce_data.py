@@ -9,6 +9,7 @@ import scipy.sparse
 from Arnoldi import ArnoldiExp
 from Stable_Lanzcos import LanzcosExp
 from NBLA import NBLAExp
+from kiops import KiopsExp
 
 # Collects data on performance of different methods
 # Independant Variables:
@@ -21,16 +22,17 @@ from NBLA import NBLAExp
 def GetA(n):
     A = diags([-1,2,-1], [-1,0,1], shape=(n,n))
     A = csc_matrix(A)
-    return A * n**2
+    return A / n**2
 
 methods = {
     "Scipy": lambda A, v, m: expm_multiply(A,v),
     "Arnoldi": ArnoldiExp,
     "Lanzcos": LanzcosExp#,
+    #"Kiops": lambda A, V, m: KiopsExp(A,V)
     #"NBLA": NBLAExp
 }
 m = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]
-n = [2**i for i in range(0, 20)]
+n = [2**i for i in range(0, 8)]
 print(n)
 
 v = np.random.rand(np.max(n))
@@ -57,6 +59,7 @@ computation_times = []
 true_values = []
 scipy_computing_time =[]
 for N in n:
+    print("Computing {0}".format(N))
     A = GetA(N)
     V = v[0:N]
     start = time.time()
