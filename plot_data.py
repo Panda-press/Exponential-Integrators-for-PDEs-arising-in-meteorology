@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pickle as pickle
 
-e_threshold = 1e-10
+e_thresholds = [1e-6, 1e-10]
 
 # %%
 data = pd.read_csv("Experiment_Data.csv")
@@ -49,37 +49,42 @@ for n in ns:
     
     plt.figure(1)
     plt.savefig("Plots/M v E Results for N={0}".format(n))
+    plt.grid(True, which="both")
     plt.close()
     plt.figure(2)
-    plt.savefig("Plots/M v Comp time Results for N={0}".format(n)) 
+    plt.grid(True, which="both")
+    plt.savefig("Plots/M v Comp Time Results for N={0}".format(n)) 
     plt.close()
     plt.figure(3)
-    plt.savefig("Plots/Compt time v E Results for N={0}".format(n))
+    plt.grid(True, which="both")
+    plt.savefig("Plots/Compt Time v E Results for N={0}".format(n))
     plt.close()
 
 # %% Plotting time for error to be bellow given bound
-cut_data = data[data["Error"] < e_threshold]
-ns = cut_data["N"].unique()
-for method in data["Method"].unique():
-    method_data = cut_data[cut_data["Method"] == method]
-    result = []
-    for n in ns:
-        ndata = method_data[method_data["N"] == n]
-        if method == "Scipy":
-            continue
+for e_threshold in e_thresholds:
+    cut_data = data[data["Error"] < e_threshold]
+    ns = cut_data["N"].unique()
+    for method in data["Method"].unique():
+        method_data = cut_data[cut_data["Method"] == method]
+        result = []
+        for n in ns:
+            ndata = method_data[method_data["N"] == n]
+            if method == "Scipy":
+                continue
+            try:
+                result.append(ndata["Computation Time"].to_list()[ndata["Error"].argmin()])
+            except:
+                result.append(None)
         try:
-            result.append(ndata["Computation Time"].to_list()[ndata["Error"].argmin()])
+            plt.loglog(ns, result, label = method)
         except:
-            result.append(None)
-    try:
-        plt.loglog(ns, result, label = method)
-    except:
-        continue
-plt.legend()
-plt.title("A graph Showing the time to get below an error of {0} for different matrix sizes".format(e_threshold))
-plt.xlabel("N")
-plt.ylabel("Computation Time")
-plt.savefig("Plots/time to get below an error of {0}.png".format(e_threshold))
+            continue
+    plt.legend()
+    plt.title("A graph Showing the time to get below an error of {0} for different matrix sizes".format(e_threshold))
+    plt.xlabel("N")
+    plt.ylabel("Computation Time")
+    plt.grid(True, which="both")
+    plt.savefig("Plots/time to get below an error of {0}.png".format(e_threshold))
 
 
 
