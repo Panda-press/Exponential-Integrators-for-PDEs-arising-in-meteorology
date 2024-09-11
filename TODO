@@ -1,0 +1,115 @@
+Test that zero is still a stable solution to BGFix problem:
+- issue with methods not mapping 'close to zero' to 'close to zero', i.e.,
+  error cancellation issues. Can be seen by adding print statements of
+  'v_1' and return value to the exponential matrix multiplications:
+  Example: 
+  1) python risingbubble.py EXPKIOPS 10 5
+     5.2597831931017107e-20 1.183711019093123e-21 (1, 0, 10, 1, np.float64(1.0376488395782095e-10), 11)
+     time step 1, time 0.08953782258466564, tau 0.08953782258466564, calls (32, 0, 0)
+     3.320426777929231e-27 3.320426777929231e-27 (1, 0, 0, 1, 0.0, 10)
+  2) python risingbubble.py EXPARN 10 5
+     5.2597831931005623e-20 4.110823548620504e-09
+     time step 1, time 0.08953782258465577, tau 0.08953782258465577, calls (30, 0, 0)
+     4.1085539186039155e-09 145.24454418826016
+  3) python risingbubble.py EXPLAN 10 5
+     5.259783193102112e-20 27.120877028597494
+     time step 1, time 0.0895378225846691, tau 0.0895378225846691, calls (50, 0, 0)
+     27.16613334107525 1.34081171198779e+29
+  4) python risingbubble.py EXPNBLA 10 5
+     5.2597831931017913e-20 27.120877028546982
+     time step 1, time 0.08953782258466633, tau 0.08953782258466633, calls (58, 0, 0)
+     27.129245936475673 1.3060807582242573e+29
+  Looking at LAN more in detail:
+  |v_1| = 2.293421721598998e-10
+  e^He_1 = [1.48178243e+09 7.58475595e+09 1.94171195e+10 2.91667725e+10 2.29547997e+10]
+  H: <DIAgonal sparse matrix of dtype 'float64'
+        with 13 stored elements (3 diagonals) and shape (5, 5)>
+      Coords        Values
+      (0, 0)        -14.825088425533599
+      (0, 1)        8.333922563475797
+      (1, 0)        8.333922563475797
+      (1, 1)        -11.64531222687998
+      (1, 2)        14.785313993712743
+      (2, 1)        14.785313993712743
+      (2, 2)        -12.148870520733077
+      (2, 3)        22.772480508209572
+      (3, 2)        22.772480508209572
+      (3, 3)        -11.740828517424646
+      (3, 4)        31.020958767896705
+      (4, 3)        31.020958767896705
+      (4, 4)        -11.582261203928587
+  V: [[-9.80696388e-07  2.36519121e-06  4.96593516e-06 -6.28780722e-07
+      -5.30878055e-06]
+     [-0.00000000e+00 -0.00000000e+00  0.00000000e+00  0.00000000e+00
+       0.00000000e+00]
+     [ 5.27104808e-04 -1.76107481e-03 -1.94577064e-04  1.82105400e-03
+       1.55526287e-04]
+     ...
+     [-0.00000000e+00 -0.00000000e+00  0.00000000e+00  0.00000000e+00
+       0.00000000e+00]
+     [-4.24806430e-07  8.71690407e-04 -1.71141685e-03 -5.32895926e-04
+       1.96858901e-03]
+     [-0.00000000e+00  7.81242900e-04 -5.12412070e-04 -1.23639782e-03
+       4.30906752e-04]]
+
+
+
+New directions:
+- understanding KIOPS and BAMPHI
+  https://www.sciencedirect.com/science/article/abs/pii/S0377042722005714
+- implement BAMPHI
+- how to fix 'm' depending on solution (adaptive choice)
+- predictor-corrector with expm-be
+- higher order ODE methods
+- grid adaptivity
+
+- instead of setting R(u) = N(u) - Au how about
+                     R(u) = N(u) - A^mu where A^m is the approximate matrix
+                     constructed for the exponential integrator, i.e., the
+                     matrix used to compute exp(A^m)
+
+- Parabolic problems
+  https://arxiv.org/pdf/2209.11922
+- compressible flow problem
+  https://www.sciencedirect.com/science/article/abs/pii/S0021999118301803
+  https://arxiv.org/pdf/2303.15861 (semilinear ADR)
+
+- general performance improvements, e.g., exp_multiply with tridiagonal matrix
+- (semi) time stepping implicit methods?
+- stability improvements
+  https://groups.csail.mit.edu/tds/papers/Musco/SODA18.pdf
+  https://arxiv.org/pdf/1708.07788
+  https://arxiv.org/pdf/1111.1491
+- other methods
+  Computing the Action of the Matrix Exponential, with an Application to Exponential Integrators
+  https://epubs.siam.org/doi/10.1137/100788860
+  A new efficient and accurate spline algorithm for the matrix exponential computation
+  https://www.sciencedirect.com/science/article/pii/S0377042717305897
+  A Parallel Method for the Computation of Matrix Exponential Based on Truncated Neumann Series
+  https://ieeexplore.ieee.org/document/8023061
+  A highly parallel algorithm for computing the action of a matrix exponential on a vector based on a multilevel Monte Carlo method
+  https://www.sciencedirect.com/science/article/pii/S0898122120300808
+- Preconditioning Lanczos Approximations to the Matrix Exponential
+  https://epubs.siam.org/doi/10.1137/040605461
+     https://typeset.io/pdf/preconditioning-lanczos-approximations-to-the-matrix-rkmnumdina.pdf
+- Sparse exp(A) computation!  
+  High-performance computation of the exponential of a large sparse matrix
+  https://www.semanticscholar.org/paper/High-performance-computation-of-the-exponential-of-Wu-Zhang/1ffef7d5dae7a10b94f546f80af50926fc3e7e76
+
+
+-----------------------
+
+Report:
+- check code to optimize matrix vector multiplications!
+- explain how the number of matrix vector multiplications with 'A' scale
+  with m for the different problems - it seems not to be linear?
+- do an experiment with an approximate Jacobian, i.e., take one of the
+  PDE test cases (e.g. Allen-Cahn) and run similar experiments as you have shown for the
+  FD code using the exact Jacobian and an approximate Jacobian.
+- how do the graphs scale with h, i.e., the grid spacing?
+  Your example is not the right one - when increasing N you should get a
+  matrix which is worse conditioned
+- explain issues with finite-element method, i.e., the mass matrix
+- obtain some sensible finite element matrices (run FE for a number of
+  steps produce relevant u^n and use to compare different methods for a
+  simgle time step using different values for tau

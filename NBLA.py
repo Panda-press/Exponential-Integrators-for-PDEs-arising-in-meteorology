@@ -31,6 +31,7 @@ def NBLA(A, B, C, m):
         delta = delta.T
 
         Sigma = W[:,j+1].T@V[:,j+1]
+        assert Sigma >= 0
         delta *= np.sqrt(Sigma)
         beta *= np.sqrt(Sigma) 
 
@@ -49,7 +50,9 @@ def NBLAExp(A, v_1, m):
     H, V, W, beta = NBLA(A, v_1, v_1, m)
     e_1 = np.zeros((m))
     e_1[0] = 1
-    return V @ expm_multiply(H, e_1) * beta
+    ret = V @ expm_multiply(H, e_1) * beta
+    # print(v_1.dot(v_1), ret.dot(ret))
+    return ret # V@expm_multiply(H,e_1)*np.linalg.norm(v_1)
 
 if __name__ == "__main__":
     np.set_printoptions(linewidth=200)
@@ -67,4 +70,3 @@ if __name__ == "__main__":
 
     print(NBLAExp(A, v, m))
     print(expm_multiply(A, v))
-

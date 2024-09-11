@@ -5,29 +5,45 @@
 # ## Setup
 
 # %%
+import sys
+
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.sparse.linalg import cg, LinearOperator
+from scipy.linalg import norm
+from scipy.sparse.linalg import lgmres, gmres, LinearOperator, aslinearoperator
 from scipy.sparse import identity, diags
-
-from dune.grid import structuredGrid as leafGridView
-from dune.fem.space import lagrange
-from dune.fem import integrate
-from dune.fem.operator import galerkin
-from ufl import ( TestFunction, TrialFunction, SpatialCoordinate, FacetNormal,
-                  dx, ds, div, grad, dot, inner, conditional, as_vector,
-                  exp, sin, pi )
+from scipy.optimize import newton_krylov, KrylovJacobian
+import random
 
 from scipy.sparse.linalg import expm_multiply
+expm_sci = [lambda A,x,m: expm_multiply(A,x),"Scipy"]
+from Stable_Lanzcos import LanzcosExp
+expm_lanzcos = [lambda A,x,m: LanzcosExp(A,x,m),"Lanzcos"]
+from NBLA import NBLAExp
+expm_nbla = [lambda A,x,m: NBLAExp(A,x,m),"NBLA"]
+from Arnoldi import ArnoldiExp 
+expm_arnoldi = [lambda A,x,m: ArnoldiExp(A,x,m),"Arnoldi"]
+from kiops import KiopsExp
+expm_kiops = [lambda A,x,m: KiopsExp(A,x),"Kiops"]
+
+from dune.grid import cartesianDomain
+from dune.alugrid import aluCubeGrid as leafGridView
+from dune.fem.space import lagrange
+from dune.fem import integrate, threading, globalRefine
+from dune.fem.view import adaptiveLeafGridView as view
+from dune.fem.operator import galerkin
+from dune.fem.function import gridFunction
+from ufl import dx, dot, inner, grad, TestFunction, TrialFunction
+
 # %% [markdown]
 #
 # Simple utility function to show the result of a simulation
 
 # %%
-def printResult(method,error):
-    print(method,"L^2, H^1 error:",'{:0.5e}, {:0.5e}'.format(
+def printResult(time,error,*args):
+    print(time,'{:0.5e}, {:0.5e}'.format(
                  *[ np.sqrt(e) for e in integrate([error**2,inner(grad(error),grad(error))]) ]),
-          flush=True)
+          *args, " # gnuplot", flush=True)
 
 # %% [markdown]
 # ## A base class for the steppers
@@ -38,7 +54,13 @@ def printResult(method,error):
 
 # %%
 class BaseStepper:
-    def __init__(self, N, method="explicit"):
+    # method is 'explicit', 'approx', 'exact'
+    # mass is 'lumped', 'exact', 'identitiy'
+    # Change:
+    # - define class that wraps an operator 'N' and returns object with same
+    #   interface but including M^{-1}
+    # - put N on right hand side
+    def __init__(self, N, *, method="explicit", mass="lumped"):
         self.N = N
         self.method = method
         self.spc = N.domainSpace
@@ -46,188 +68,225 @@ class BaseStepper:
         self.res = self.un.copy()       # residual
         self.shape = (self.spc.size,self.spc.size)
 
-        # inverse lumped mass matrix (see the explanation given in 'wave.py' tutorial example)
-        # u^n v dx = sum_j u^n_j phi_j phi_i dx = M u^n
-        # Mu^{n+1} = Mu^n - dt N(u^n) (for FE)
-        # u^{n+1} = u^n - dt M^{-1}N(u^n)
-        M = galerkin(dot(u,v)*dx).linear().as_numpy
-        Mdiag = M.sum(axis=1) # sum up the entries onto the diagonal
-        self.Minv = diags( 1/Mdiag.A1, shape=self.shape )
-        self.countN = 0
-        self.linIter = 0
+        if mass == 'identity':
+            # This is hack!
+            # Issue: the dgoperator is set to be on the right so we need
+            # the action of -N. Since this is the only operator corrently
+            # using the identity mass matrix we change the sign here
+            # NEEDS FIXING
+            self.Minv = -identity(self.shape[0]) 
+        else:
+            # inverse (lumped) mass matrix (see the explanation given in 'wave.py' tutorial example)
+            # u^n v dx = sum_j u^n_j phi_j phi_i dx = M u^n
+            # Mu^{n+1} = Mu^n - dt N(u^n) (for FE)
+            # u^{n+1} = u^n - dt M^{-1}N(u^n)
+            # bug: u,v = TrialFunction(N.domainSpace), TestFunction(N.rangeSpace)
+            u,v = TrialFunction(N.domainSpace.as_ufl()), TestFunction(N.rangeSpace.as_ufl())
+            M = galerkin(dot(u,v)*dx).linear().as_numpy
+            if mass == 'lumped':
+                Mdiag = M.sum(axis=1) # sum up the entries onto the diagonal
+                self.Minv = diags( 1/Mdiag.A1, shape=self.shape )
+
         # time step to use
         self.tau = None
 
-        if not "expl" in self.method:     # for all non-explicit method we need the linearization
-            self.A = self.N.linear()
-            self.d = self.un.copy()       # search direction for non-linear method
-            self.I = identity(self.shape[0])
-            self.D = None                 # store 'implicit Euler' operator D = I + tau M^{-1}DN[u]
+        if self.method == "exact":
+            self.Nprime = self.N.linear()
+
+        self.I = identity(self.shape[0])
+        self.tmp = self.un.copy()
+        self.countN = 0
+        self.linIter = 0
 
     # call before computing the next time step
     def setup(self,un,tau):
         self.un.assign(un)
         self.tau = tau
-        if self.method == "quasiNewton":
-            self.D = self.matrix(self.un) # we only compute 'D' once 
+        if not "expl" in self.method:
+            self.linearize(self.un)
 
     # evaluate w = tau M^{-1} N[u]
-    def evalN(self,u,w):
-        self.N(u, w)
-        w.as_numpy[:] *= self.tau * self.Minv
+    def evalN(self,x):
+        xh = self.N.domainSpace.function("tmp", dofVector=x)
+        self.N(xh, self.tmp)
         self.countN += 1
-
-    # linearize the equation around current stage (or use fixed 'D')
-    def linearize(self,u):
-        assert not self.method == "explicit"
-        if self.method == "quasiNewton":
-            pass
-        elif self.method == "Newton":
-            self.D = self.matrix(u)
-        elif self.method == "approxDN":
-            self.D = self.DNapprox(self, u)
+        return self.tmp.as_numpy * (self.tau * self.Minv)
 
     # compute matrix D = tau M^{-1}DN[u] + I
     # e.g. BE: u^{n+1} + tau M^{-1}N[u^{n+1}] = u^n
     # lineaaized around u^n_k: (I + tau M^{-1}DN[u^n_k])u = u^n
-    def matrix(self,u):
-        self.N.jacobian(u,self.A)
-        D = self.tau * self.Minv @ self.A.as_numpy
-        D += self.I
-        return D
+    def linearize(self,u):
+        assert not self.method == "expl"
+        if self.method == "approx":
+            self.A = aslinearoperator(self.Aapprox(self, u))
+            self.D = aslinearoperator(self.Dapprox(self, u))
+            # self.test(u)
+        else:
+            # assert False # we are not considering 'exact' at the moment
+            self.N.jacobian(u,self.Nprime)
+            self.A = self.tau * self.Minv @ self.Nprime.as_numpy
+            self.D = self.A + self.I
 
-    # _matvec(x) returns ( tau M^{-1}DN(u) + I )x approximated by
-    #            tau M^{-1} ( N(u + eps x) - N(u) ) / eps + x
-    class DNapprox(LinearOperator):
+    def test(self,u):
+        self.N.jacobian(u,self.Nprime)
+        self.A_ = self.tau * self.Minv @ self.Nprime.as_numpy
+        x = 0*self.tmp.as_numpy
+        maxVal = 0
+        for k in range(10):
+            i = random.randrange(0,len(x),1)
+            x[i] = random.random()
+            y = self.A@x - self.A_@x
+            maxVal = max(maxVal,y.dot(y))
+            # print(i,maxVal)
+        print("difference:",maxVal)
+
+    class Aapprox:
         def __init__(self,stepper, u):
-            self.stepper = stepper
-            self.u = u.copy()
-            self.Nu = u.copy()
-            self.uplusx = u.copy()
-            self.Nuplusx = u.copy()
-
-            self.norm_u = u.as_numpy.dot(u.as_numpy)
-            self.stepper.evalN(u,self.Nu)
-
-            self.shape = stepper.shape
-            self.dtype = np.dtype(np.float64)
-        def epsilon(self,x):
-            meps = np.finfo(np.float64).eps
-            xdotx = x.dot(x)
-            if xdotx > meps:
-                return np.sqrt( ( 1 + self.norm_u) * meps / xdotx )
+            self.krylovJacobian = KrylovJacobian()
+            self.shape = (u.as_numpy.shape[0],u.as_numpy.shape[0])
+            self.dtype = u.as_numpy.dtype
+            f = stepper.evalN(u.as_numpy)
+            self.krylovJacobian.setup(u.as_numpy, f, stepper.evalN)
+        # issue with x having shape (N,1) needed by exponential method and
+        # not handled by KrylovJacobian
+        def matvec(self,x):
+            if len(x.shape) > 1:
+                y = x.copy()
+                y[:,0] = self.krylovJacobian.matvec(x[:,0])
             else:
-                return np.sqrt( meps )
-        def _matvec(self,x):
-            eps = self.epsilon(x)
-            # u + eps x
-            self.uplusx.as_numpy[:] = self.u.as_numpy[:] + eps * x[:]
-            # N(u + eps x)
-            self.stepper.evalN(self.uplusx,self.Nuplusx)
-            ret = (self.Nuplusx.as_numpy[:] - self.Nu.as_numpy[:]) / eps
-            ret[:] += x
-            return ret
+                y = self.krylovJacobian.matvec(x)
+            return y
+        # assume problem is self-adjoint - how does this hold for
+        # the linearization and needs fixing for non self-adjoint PDEs
+        def rmatvec(self,x):
+            return self.matvec(x)
+        def solve(self, rhs, tol=0):
+            return self.krylovJacobian.solve(rhs,tol)
 
-    def callback(self,x):
-        self.linIter += 1
+    class Dapprox:
+        def __init__(self,stepper, u):
+            self.krylovJacobian = KrylovJacobian()
+            self.stepper = stepper
+            self.shape = (u.as_numpy.shape[0],u.as_numpy.shape[0])
+            self.dtype = u.as_numpy.dtype
+            f = stepper.evalN(u.as_numpy)
+            self.krylovJacobian.setup(u.as_numpy, f, stepper.evalN)
+        # issue with x having shape (N,1) needed by exponential method and
+        # not handled by KrylovJacobian
+        def matvec(self,x):
+            if len(x.shape) > 1:
+                y = x.copy()
+                y[:,0] = self.krylovJacobian.matvec(x[:,0]) + x
+            else:
+                y = self.krylovJacobian.matvec(x) + x
+            return y
+        # assume problem is self-adjoint - how does this hold for
+        # the linearization and needs fixing for non self-adjoint PDEs
+        def rmatvec(self,x):
+            return self.matvec(x)
+
+    # the below should be the same - need to test to make sure
+    """
+    class Dapprox:
+        def __init__(self,A):
+            self.shape = A.shape
+            self.dtype = A.dtype
+            self.A = A
+        def matvec(self,x):
+            y = self.A@x
+            print(y.dot(y))
+            return self.A@x + x
+    """
 
 # %% [markdown]
 # ## Forward Euler method
-
-# %%
 # solve d_t u + N(u) = 0 using u^{n+1} = u^n - tau N(u^n)
 class FEStepper(BaseStepper):
-    def __init__(self, N):
-        BaseStepper.__init__(self,N,"explicit")
+    def __init__(self, N, *, mass='lumped'):
+        BaseStepper.__init__(self,N, method="explicit", mass=mass)
         self.name = "FE"
 
     def __call__(self, target, tau):
         self.setup(target,tau)
-        self.evalN(self.un,self.res)
-        target.as_numpy[:] -= self.res.as_numpy[:]
+        target.as_numpy[:] -= self.evalN(self.un.as_numpy[:])
         return {"iterations":1, "linIter":0}
 
 # %% [markdown]
 # ## Backward Euler method
-
-# %%
 # solve d_t u + N(u) = 0 using u^{n+1} = u^n - tau N(u^{n+1})
 class BEStepper(BaseStepper):
-    def __init__(self, N, method):
-        BaseStepper.__init__(self,N,method)
-        self.name = "BE"
+    def __init__(self, N, *, method="approx", mass='lumped',
+                 ftol=1e-6, verbose=False):
+        BaseStepper.__init__(self,N, method=method, mass=mass)
+        self.name = f"BE({method})"
+        self.verbose = self.callback if verbose else None
+        self.ftol = ftol
+
+    # non linear function (non-linear problem want f(x)=0)
+    def f(self, x):
+        return self.evalN(x) + ( x - self.un.as_numpy )
+    def callback(self,x,Fx): 
+        print(self.countN, max(abs(Fx)),flush=True)
+        self.linIter += 1
 
     def __call__(self, target, tau):
+        try:
+            self.N.model.sourceTime += time.value
+        except AttributeError:
+            pass
         self.setup(target,tau)
         # get numpy vectors for target, residual, search direction
         sol_coeff = target.as_numpy
-        res_coeff = self.res.as_numpy
-        d_coeff   = self.d.as_numpy
-        # now implement a Newton method to compute root u^{n+1} of
-        # F(u) = (u - u^n) + tau M^{-1}N(u)
-        # So
-        # 1) r = F(u^{n+1,k}) = (u^{n+1,k} - u^n) + tau M^{-1}N(u^{n+1,k})
-        # 2) D = DF(u^{n+1,k} = M^{-1}DN(u^{n+1},k}) 
-        # 3) Solve Dd = r
-        # 4) u^{n+1,k+1} = u^{n+1,k} - d
-        k = 0
-        self.linIter = 0
-        while True:
-            self.evalN(target,self.res)
-            res_coeff[:] += ( sol_coeff - self.un.as_numpy )
-            # check for convergence
-            absF = np.sqrt( np.dot(res_coeff,res_coeff) )
-            print(f"iter {k} : {absF} < {1e-6} {self.linIter}",flush=True)
-            if absF < 1e-6:
-                break
-            self.linearize(target)
-            d_coeff[:],_ = cg(self.D, res_coeff, callback=lambda x: self.callback(x) ) # note that this assumes a symmetric D
-            sol_coeff[:] -= d_coeff[:]
-            k += 1
-        return {"iterations":k, "linIter":self.linIter}
+        sol_coeff[:] = newton_krylov(self.f, xin=sol_coeff, f_tol=self.ftol,
+                                     callback=self.verbose)
+        return {"iterations":0, "linIter":self.linIter}
 
 # %% [markdown]
 # ## A semi-implicit approach (with a linear implicit part)
-
-# %%
 # solve d_t u + N(u) = 0 using u^{n+1} = u^n - tau A^n u^{n+1} - tau R^n(u^n)
 # with A^n = DN(u^n) and R^n(u^n) = N(u^n) - A^n u^n, i.e., rewritting
 # N(u) = DN(u)u + (N(u) - DN(u)u)
 # So in each step we need to solve
 # ( I + tau A^n ) u^{n+1} = u^n - tau R^n(u^n)
-#                         = ( I + tau A^n) u^n - tau N(u^n)
+#                         = ( I + tau A^n ) u^n - tau N(u^n)
 # u^{n+1} = u^n - tau ( I + tau A^n )^{-1} N(u^n)
 class SIStepper(BaseStepper):
-    def __init__(self, N):
-        BaseStepper.__init__(self,N, "quasiNewton")  # quasiNewton computes D in 'setup'
-        self.name = "SI1"
+    def __init__(self, N, *, method="approx", mass='lumped'):
+        BaseStepper.__init__(self,N, method=method, mass=mass)
+        self.name = f"SI({method})"
 
     def explStep(self, target, tau):
         # this sets D = I + tau A^n and initialized u^n
         self.setup(target, tau)
-        # get numpy vectors for target, residual, search direction
-        sol_coeff = target.as_numpy
         res_coeff = self.res.as_numpy
-
         # compute N(u^n)
-        self.evalN(target,self.res)
+        res_coeff[:] = self.evalN(target.as_numpy)
         # subtract Du^n
-        res_coeff[:] -= self.D@sol_coeff
+        res_coeff[:] -= self.D@target.as_numpy
         res_coeff[:] *= -1
 
+    def callback(self,x): 
+        y = self.D@x - self.res.as_numpy
+        print(self.linIter,y.dot(y), self.countN,flush=True)
+        self.linIter += 1
+
     def __call__(self, target, tau):
-        self.explStep(target,tau)
+        self.explStep(target, tau)
 
         sol_coeff = target.as_numpy
         res_coeff = self.res.as_numpy
         self.linIter = 0
         # solve linear system
-        sol_coeff[:],_ = cg(self.D, res_coeff, callback=lambda x: self.callback(x) ) # note that this assumes a symmetric D
+        sol_coeff[:],_ = lgmres(self.D, res_coeff, # x0=self.un.as_numpy,
+                                rtol=1e-2,
+                                # callback=lambda x: self.callback(x),
+                                # callback_type='x'
+                               )
         return {"iterations":0, "linIter":self.linIter}
 
 # %%
-# solve d_t u + N(u) = 0 using exponential integrator for d_t u + A^n u + R^n(u) = 0
-# with A^n = DN(u^n) and R^n(u) = N(u) - A^n u
+# solve d_t u + N(u) = 0 using exponential integrator for
+# d_t u + A^n u + R^n(u) = 0 with A^n = DN(u^n) and R^n(u) = N(u) - A^n u
 # Set v = e^{A^n(t-t^n)} u then
 # d_t v = e^{A^n(t-t^n)) A^n u + e^{A^n(t-t^n)} d_t u
 #       = e^{A^n(t-t^n)) A^n u - e^{A^n(t-t^n)} (A^n u + R^n(u))
@@ -239,108 +298,119 @@ class SIStepper(BaseStepper):
 # u^{n+1} = e^{-A^n tau} ( u^n - tau R^n(u^n) )
 #         = e^{-A^n tau} ( u^n - tau (N(u^n) - A^n u^n) )
 #         = e^{-A^n tau} ( (I + tau A^n)u^n - tau N(u^n) )
+
 class ExponentialStepper(SIStepper):
-    def __init__(self, N, method=expm_multiply, method_name = ""):
-        SIStepper.__init__(self,N)
-        self.name = "ExpInt{0}".format(method_name)
-        self.exp_v = method
+    def __init__(self, N, exp_v, *, expv_args, method='approx', mass='lumped'):
+        SIStepper.__init__(self,N, method=method, mass=mass)
+        self.name = f"ExpInt({method},{exp_v[1]})"
+        self.exp_v = exp_v[0]
+        self.expv_args = expv_args
 
     def __call__(self, target, tau):
         # u^* = (I + tau A^n)u^n - tau N(u^n)
         # Note: the call method on the base class calls 'setup' which computes the right A^n
         self.explStep(target,tau)
-        sol_coeff = target.as_numpy
-        res_coeff = self.res.as_numpy
-        self.linIter = 0
-
         # Compute e^{-tau A^n}u^*
-        sol_coeff[:] = self.exp_v(-self.Minv @ self.A.as_numpy * tau, res_coeff[:])
-        
-        return {"iterations":0, "linIter":self.linIter}
+        target.as_numpy[:] = self.exp_v(- self.A, self.res.as_numpy, **self.expv_args)
+        return {"iterations":0, "linIter":0}
 
+steppersDict = {"FE": (FEStepper,{}),
+                "BE": (BEStepper,{}),
+                "SI": (SIStepper,{}),
+                "EXPSCI": (ExponentialStepper, {"exp_v":expm_sci}),
+                "EXPLAN": (ExponentialStepper, {"exp_v":expm_lanzcos}),
+                "EXPNBLA": (ExponentialStepper, {"exp_v":expm_nbla}),
+                "EXPARN": (ExponentialStepper, {"exp_v":expm_arnoldi}),
+                "EXPKIOPS": (ExponentialStepper, {"exp_v":expm_kiops}),
+               }
 
-# %% [markdown]
-#
-# # Numerical experiment
-#
-# ## Setup grid and space
-#
+if __name__ == "__main__":
+    threading.use = max(8,threading.max)
 
-# %%
-dimR = 1
-order = 1
-domain = [0, 0], [1, 1], [80, 80]
+    # # Numerical experiment
+    if False:
+        from parabolicTest import dimR, time, sourceTime, domain
+        from parabolicTest import paraTest1 as problem
+        baseName = "parabolic1"
+    else:
+        from allenCahn import dimR, time, sourceTime, domain
+        from allenCahn import test2 as problem
+        baseName = "allenCahn2"
 
-gridView = leafGridView(*domain)
-space = lagrange(gridView, order=order, dimRange=dimR)
-u_h = space.interpolate(0, name='u_h')
+    # ## Setup grid, space, and operator
+    gridView = view( leafGridView(cartesianDomain(*domain)) )
+    space = lagrange(gridView, order=1, dimRange=dimR)
 
-# %% [markdown]
-#
-# ## Setup operator
-#
+    model, T, tauFE, u0, exact = problem(gridView)
 
-# %%
-x,u,v,n = ( SpatialCoordinate(space), TrialFunction(space), TestFunction(space), FacetNormal(space) )
+    # %% [markdown]
+    #
+    # ## Time loop
+    #
 
-exact = as_vector([ ( 1/2*(x[0]**2+x[1]**2) - 1/3*(x[0]**3 - x[1]**3) + 1 ) *
-                    ( 1.5+sin(5*pi*(x[0]+x[1])) ) ])
+    # %%
+    stepperFct, args = steppersDict[sys.argv[1]]
+    if len(sys.argv) >= 5:
+        if "exp_v" in args.keys():
+            m = int(sys.argv[4])
+            args["expv_args"] = {"m":m}
 
-# f = - laplace u      and grad(u).n = grad(exact).n on the boundary and f = - laplace(exact)
-# fv dx = - laplace u v dx = grad(u).grad(v) dx - grad(u).n v ds
-# grad(u).grad(v) dx - (-laplace exact)v dx - grad(exact).n v ds = 0
+    factor = float(sys.argv[2])
+    tau = tauFE * factor
 
-a  = ( inner(grad(u),grad(v)) ) * dx # + (1+dot(u,u))*dot(u,v) ) * dx
-bf = (-div(grad(exact[0])) ) * v[0] * dx # + (1+exact[0]**2)*exact[0]) * v[0] * dx
-bg = dot(grad(exact[0]),n)*v[0]*ds
-op = galerkin(a-bf-bg)
+    # refinement
+    level = int(sys.argv[3])
 
-# %% [markdown]
-#
-# ## Time loop
-#
+    if level>0:
+        gridView.hierarchicalGrid.globalRefine(level)
+        tau *= 0.25**level
+    u_h = space.interpolate(u0, name='u_h')
 
-# %%
-tauFE = 7e-5 # time step (FE fails with tau=8e-5 on the [80,80] grid)
+    outputName = lambda n: f"{baseName}_{level}{sys.argv[1]}_{factor}_{n}.png"
 
-if False: # use FE
-    # stepper = FEStepper(op)
-    tau = tauFE
-else:
-    stepper = BEStepper(op, method="Newton")
-    # stepper = SIStepper(op)
-    # stepper = ExponentialStepper(op, method=expm_multiply, method_name="Scipy")
-    tau = tauFE*100 # *100 # *10000
+    # initial condition
 
-# initial condition
-u_h.interpolate( exact )
-upd = u_h.copy()
+    # stepper
+    op = galerkin(model, domainSpace=space, rangeSpace=space)
+    stepper = stepperFct(N=op,**args)
 
-# time loop
-time = 0
-n = 0
-totalIter, linIter = 0, 0
-run = []
-check = 1e-2
-while True:
-    upd.assign(u_h)
-    info = stepper(target=u_h, tau=tau)
-    assert not np.isnan(u_h.as_numpy).any()
-    time += tau
-    totalIter += info["iterations"]
-    linIter += info["linIter"]
-    # we expect u^n -> exact for n->infty, i.e., u' -> 0
-    # so we stop if upd = u^n - u^{n+1} is small
-    upd.as_numpy[:] -= u_h.as_numpy[:]
-    upd.plot()
-    update = np.sqrt( np.dot(upd.as_numpy,upd.as_numpy) )
-    print(f"time step {n}, time {time}, N {stepper.countN}, iterations {info}, update {update}")
-    if update < check:
-        run += [(check,stepper.countN,linIter)]
-        check /= 10
-    if update < 1e-7:
-        break
-    n += 1
-printResult(f"{stepper.name}{(stepper.countN,totalIter,linIter)}",u_h-exact)
-print(run)
-u_h.plot()
+    # time loop
+    n = 0
+    totalIter, linIter = 0, 0
+    run = []
+
+    plotTime = T/10
+    nextTime = plotTime
+    fileCount = 0
+    
+    if exact is not None:
+        printResult(time.value,u_h-exact(time))
+
+    u_h.plot(gridLines=None, block=False)
+    plt.savefig(outputName(fileCount))
+    fileCount += 1
+
+    while time.value < T:
+        # this actually depends probably on the method we use, i.e., BE would
+        # be + tau and the others without
+        sourceTime.value = time.value
+        info = stepper(target=u_h, tau=tau)
+        assert not np.isnan(u_h.as_numpy).any()
+        time.value += tau
+        totalIter += info["iterations"]
+        linIter   += info["linIter"]
+        n += 1
+        if time.value >= plotTime:
+            print(f"[{fileCount}]: time step {n}, time {time.value}, N {stepper.countN}, iterations {info}",
+                  flush=True)
+            if exact is not None:
+                printResult(time.value,u_h-exact(time),stepper.countN)
+            run += [(stepper.countN,linIter)]
+            u_h.plot(gridLines=None, block=False)
+            plt.savefig(outputName(fileCount))
+            fileCount += 1
+            plotTime += nextTime
+
+    print(f"Final time step {n}, time {time.value}, N {stepper.countN}, iterations {info}")
+    u_h.plot(gridLines=None, block=False)
+    plt.savefig(outputName(fileCount))

@@ -9,6 +9,7 @@ import scipy.sparse
 from Arnoldi import ArnoldiExp
 from Stable_Lanzcos import LanzcosExp
 from NBLA import NBLAExp
+from kiops import KiopsExp
 
 # Collects data on performance of different methods
 # Independant Variables:
@@ -21,22 +22,19 @@ from NBLA import NBLAExp
 def GetA(n):
     A = diags([-1,2,-1], [-1,0,1], shape=(n,n))
     A = csc_matrix(A)
-    return A
+    return A / n**2
 
 methods = {
     "Scipy": lambda A, v, m: expm_multiply(A,v),
     "Arnoldi": ArnoldiExp,
     "Lanzcos": LanzcosExp#,
+    #"Kiops": lambda A, V, m: KiopsExp(A,V)
     #"NBLA": NBLAExp
 }
 m = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]
-n = [10,20,30,40,50,60,70,80,90,
-     100,200,300,400,500,600,700,800,900,
-     1000,2000,3000,4000,5000,6000,7000,8000,9000,
-     10000,20000,30000,40000,50000,60000,70000,80000,90000,
-     100000,200000,300000,400000,500000,600000,700000,800000,900000,
-     1000000
-     ]
+n = [2**i for i in range(0, 8)]
+print(n)
+
 v = np.random.rand(np.max(n))
 method_names = list(methods.keys())
 mlen = len(m)
@@ -61,6 +59,7 @@ computation_times = []
 true_values = []
 scipy_computing_time =[]
 for N in n:
+    print("Computing {0}".format(N))
     A = GetA(N)
     V = v[0:N]
     start = time.time()
@@ -108,6 +107,5 @@ data["Computation Time"] = computation_times
 
 data.dropna()
 
-with open("Experiment_Data.pickle", "wb") as file:
-    pickle.dump(data, file, pickle.HIGHEST_PROTOCOL)
+data.to_csv("Experiment_Data.csv")
 
