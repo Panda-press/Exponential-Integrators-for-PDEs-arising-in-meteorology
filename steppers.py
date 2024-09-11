@@ -13,13 +13,14 @@ from scipy.linalg import norm
 from scipy.sparse.linalg import lgmres, gmres, LinearOperator, aslinearoperator
 from scipy.sparse import identity, diags
 from scipy.optimize import newton_krylov, KrylovJacobian
-from scipy.sparse.linalg import expm_multiply
 import random
 
+from scipy.sparse.linalg import expm_multiply
+expm_sci = [lambda A,x,m: expm_multiply(A,x),"Scipy"]
 from Stable_Lanzcos import LanzcosExp
 expm_lanzcos = [lambda A,x,m: LanzcosExp(A,x,m),"Lanzcos"]
 from NBLA import NBLAExp
-expm_nbla = [lambda A,x,m: NBLAExp(A,x.m),"NBLA"]
+expm_nbla = [lambda A,x,m: NBLAExp(A,x,m),"NBLA"]
 from Arnoldi import ArnoldiExp 
 expm_arnoldi = [lambda A,x,m: ArnoldiExp(A,x,m),"Arnoldi"]
 from kiops import KiopsExp
@@ -316,7 +317,7 @@ class ExponentialStepper(SIStepper):
 steppersDict = {"FE": (FEStepper,{}),
                 "BE": (BEStepper,{}),
                 "SI": (SIStepper,{}),
-                "EXPSCI": (ExponentialStepper, {"exp_v":expm_multiply}),
+                "EXPSCI": (ExponentialStepper, {"exp_v":expm_sci}),
                 "EXPLAN": (ExponentialStepper, {"exp_v":expm_lanzcos}),
                 "EXPNBLA": (ExponentialStepper, {"exp_v":expm_nbla}),
                 "EXPARN": (ExponentialStepper, {"exp_v":expm_arnoldi}),
