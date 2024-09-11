@@ -70,8 +70,13 @@ New directions:
 
 - Parabolic problems
   https://arxiv.org/pdf/2209.11922
+- Cahn-Hilliard
+  https://arxiv.org/abs/2312.15656
+- Allen Cahn
+  https://arxiv.org/pdf/2408.14984
 - compressible flow problem
   https://www.sciencedirect.com/science/article/abs/pii/S0021999118301803
+      https://arxiv.org/pdf/1801.06300
   https://arxiv.org/pdf/2303.15861 (semilinear ADR)
 
 - general performance improvements, e.g., exp_multiply with tridiagonal matrix
