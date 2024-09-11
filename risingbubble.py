@@ -51,7 +51,7 @@ def RisingBubble(dim=2):
 
 
     Model.domain = [0]*dim, [1000]*(dim-1)+[2000], [40]*(dim-1)+[80]
-    Model.endTime = 1200.
+    Model.endTime = 400 # 1200.
     Model.name = "RisingBubble"
 
     return BgFixModel(Model, dim)
@@ -68,11 +68,11 @@ from steppers import steppersDict
 if __name__ == "__main__":
     stepperFct, args = steppersDict[sys.argv[1]]
     if len(sys.argv) >= 3:
-        cfl = int(sys.argv[2])
-        outputName = lambda n: f"risingbubble_{sys.argv[1]}{cfl}_{n}"
+        cfl = float(sys.argv[2])
+        outputName = lambda n: f"risingbubble_{sys.argv[1]}{cfl}_{n}.png"
     else:
         cfl = 0.45
-        outputName = lambda n: f"risingbubble_{sys.argv[1]}default_{n}"
+        outputName = lambda n: f"risingbubble_{sys.argv[1]}default_{n}.png"
 
     # default name for model
     Model = RisingBubble(2)
@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     stepper = stepperFct(op, mass='identity', **args)
 
-    # get initial time step size
+    # get initial time step size - just using some very small timestep
     info = stepper(target=u_h, tau=1e-5)
     u_h.interpolate(Model.U0)
 
@@ -109,14 +109,15 @@ if __name__ == "__main__":
     t = 0
     n = 0
     fileCount = 0
-    plotTime = 0.5
-    nextTime = 0.5
+    plotTime = 1
+    nextTime = 1
 
     u_h.plot(gridLines=None, block=False)
     plt.savefig(outputName(fileCount))
     fileCount += 1
+    lastNcalls = op.info()[0]
 
-    while t < 400:
+    while t < Model.endTime:
         op.setTime(t)
         tau = op.localTimeStepEstimate[0]*cfl
         info = stepper(target=u_h, tau=tau)
@@ -124,8 +125,10 @@ if __name__ == "__main__":
 
         assert not np.isnan(u_h.as_numpy).any()
         n += 1
-        print(f"time step {n}, time {t}, tau {tau}, calls {op.info()}")
         if True: # t>plotTime:
+            minMax = max(abs(u_h.as_numpy))
+            print(f"time step {n}, time {t}, tau {tau}, calls {op.info()}, lastNcalls {op.info()[0]-lastNcalls}, minMax={minMax}")
+            lastNcalls = op.info()[0]
             u_h.plot(gridLines=None, block=False)
             plt.savefig(outputName(fileCount))
             fileCount += 1

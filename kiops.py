@@ -174,7 +174,7 @@ def kiops(τ_out, A, u, tol = 1e-10, m_init = 10, mmin = 10, mmax = 128, iop = 2
          nrm = numpy.sqrt( global_sum_nrm + V[j, n:n+p] @ V[j, n:n+p] )
 
          # Happy breakdown
-         if nrm < tol:
+         if nrm < tol and j >= mmin:
             happy = True
             break
 
@@ -322,7 +322,11 @@ def kiops(τ_out, A, u, tol = 1e-10, m_init = 10, mmin = 10, mmax = 128, iop = 2
    return w, stats
 
 def KiopsExp(A, v_1):
-    return kiops([1],A,np.array([v_1]))[0]
+    ret,stats = kiops([1],A,np.array([v_1]), tol = 1e-5, m_init = 10, mmin = 5)
+    ret = ret[0]
+    # print("(step, reject, krystep, exps, conv, m_ret)",stats)
+    # print(v_1.dot(v_1), ret.dot(ret),stats)
+    return ret
 
 if __name__ == "__main__":
     n = 50
