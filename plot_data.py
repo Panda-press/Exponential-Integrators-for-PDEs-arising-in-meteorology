@@ -57,7 +57,7 @@ for n in ns:
     plt.close()
     plt.figure(3)
     plt.grid(True, which="both")
-    plt.savefig("Plots/Compt Time v E Results for N={0}".format(n))
+    plt.savefig("Plots/Comp Time v E Results for N={0}".format(n))
     plt.close()
 
 # %% Plotting time for error to be bellow given bound
@@ -80,7 +80,7 @@ for e_threshold in e_thresholds:
         except:
             continue
     plt.legend()
-    plt.title("A graph Showing the time to get below an error of {0} for different matrix sizes".format(e_threshold))
+    plt.title("Graph Showing time to get below error of {0} for different matrix sizes".format(e_threshold))
     plt.xlabel("N")
     plt.ylabel("Computation Time")
     plt.grid(True, which="both")
