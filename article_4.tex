@@ -135,13 +135,16 @@ Here we run numerical experiments, computing $e^Av$ for a tridiagonal matrix $A$
 	  \includegraphics[width=\linewidth]{Plots/M v Comp Time Results for N=524288.png}
 	  \label{fig:MEe6}
        \centering
-	  \includegraphics[width=\linewidth]{Plots/Compt time v E Results for N=524288.png}
+	  \includegraphics[width=\linewidth]{Plots/Comp time v E Results for N=524288.png}
 	  \label{fig:MEe6}
     \end{minipage}
 \end{figure}
 These results show that the Lanzcos algorithm outperforms the Arnoldi algorithm in both convergence rate and computational time.
 
-Below we compare the time required for the different algorithms to get below an error of $10^{10}$ when computing $e^Av$ for various matrix sizes.
+Below we compare the time required for the different algorithms to get below an error of $10^6$ and $10^{10}$ when computing $e^Av$ for various matrix sizes.
+\begin{figure}[H]
+\includegraphics[width=\linewidth]{Plots/time to get below an error of 1e-06.png}
+\end{figure}
 \begin{figure}[H]
 \includegraphics[width=\linewidth]{Plots/time to get below an error of 1e-10.png}
 \end{figure}
