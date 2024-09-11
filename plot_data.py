@@ -48,8 +48,8 @@ for n in ns:
         plt.legend()
     
     plt.figure(1)
-    plt.savefig("Plots/M v E Results for N={0}".format(n))
     plt.grid(True, which="both")
+    plt.savefig("Plots/M v E Results for N={0}".format(n))
     plt.close()
     plt.figure(2)
     plt.grid(True, which="both")
@@ -85,6 +85,7 @@ for e_threshold in e_thresholds:
     plt.ylabel("Computation Time")
     plt.grid(True, which="both")
     plt.savefig("Plots/time to get below an error of {0}.png".format(e_threshold))
+    plt.close()
 
 
 
