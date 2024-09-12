@@ -21,7 +21,7 @@ def Lanzcos(Amult, _V_hat, m):
         Av = Amult(v[:, i])
         alpha[i] = Av.dot(v[:,i]) # v[:, i].T @ A @ v[:, i]
         v_hat[:, i+1] = Av - alpha[i]*v[:,i] - beta[i]*v[:,i-1]
-        print(i,alpha[i],beta[i])
+        # print(i,alpha[i],beta[i])
 
     beta = beta[2:m+1]
     alpha = alpha[1:m+1]
