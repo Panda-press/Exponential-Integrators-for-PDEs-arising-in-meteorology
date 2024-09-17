@@ -56,7 +56,7 @@ class Tester():
             with open(self.intitial_file_name, 'wb') as file:
                 pickle.dump(initial_condition.as_numpy[:], file)
     
-    def run_test(self, tau, end_time, test_stepper, stepper_args):
+    def run_test(self, tau, test_stepper, stepper_args, end_time):
         
         # Load initial conditions
         with open(self.intitial_file_name, 'rb') as file:
@@ -88,6 +88,7 @@ class Tester():
         return current_step
 
     def produce_results(self, tau, stepper, stepper_args, end_time):
+        self.run_test(tau, stepper, stepper_args, end_time)
         stepper = stepper(self.op, **stepper_args)
         test_file_name = self.get_test_results_file(tau, stepper, end_time)
         target_file_name = self.get_target_results_file(tau, end_time)
@@ -119,11 +120,10 @@ if __name__ == "__main__":
         m = 5
         args["expv_args"] = {"m":m}
 
-    end_time = 20
+    end_time = 3
 
-    tester = Tester(u_h, op, "Allen Cahn", 5)
+    tester = Tester(u_h, op, "Allen Cahn", 1)
 
-    tester.run_test(tau, end_time, exp_arnoldi_stepper, args)
     
     tester.produce_results(tau, exp_arnoldi_stepper, args, end_time)
 
