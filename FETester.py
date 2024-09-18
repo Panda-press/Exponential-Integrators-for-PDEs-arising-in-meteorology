@@ -1,6 +1,7 @@
 import numpy as np
 import pickle as pickle
 import os as os
+import haslib
 from ufl import *
 from dune.ufl import Space, Constant
 from dune.fem.function import gridFunction
@@ -17,17 +18,16 @@ class Tester():
                  op, 
                  problem_name, 
                  seed_time = 0, 
-                 exact = None,
                  setup_tau = 1e-2,
                  setup_stepper = BEStepper,
                  **stepper_args):
 
         self.op = op
+        self.N = self.op.domainSpace.gridView.size(0)
         self.initial_condition = initial_condition
         self.seed_time = seed_time
         self.setup_stepper = setup_stepper(op, **stepper_args)
-        self.folder = "FETests/Problem:{0}_Setup_Tau:{2}_Setup_Stepper:{1}_Seed_Time:{3}".format(problem_name,self.setup_stepper.name,setup_tau,self.seed_time)
-        
+        self.folder = "FETests/Problem:{0}_Grid_Size:{4}_Setup_Tau:{2}_Setup_Stepper:{1}_Seed_Time:{3}".format(problem_name,self.setup_stepper.name,setup_tau,self.seed_time,self.N)
         
         self.run_setup(setup_tau, self.setup_stepper, initial_condition)
 
@@ -37,8 +37,9 @@ class Tester():
     def get_target_results_file(self, tau, end_time):
         return self.folder + "_Tau:{0}_End_Time:{1}_Target.pickle".format(tau, end_time)
 
-    def get_test_results_file(self, tau, stepper, end_time):
-        return self.folder + "_Tau:{0}_Stepper:{1}_End_Time:{2}_Test.pickle".format(tau, stepper.name, end_time)
+    def get_test_results_file(self, tau, stepper_name, end_time):
+        return self.folder +
+        "_Tau:{0}_End_Time:{1}_Stepper:{2}.pickle".format(tau, end_time, stepper_name)
 
     def run_setup(self, tau, setup_stepper, initial_condition):
         # File path to initial data
@@ -65,65 +66,82 @@ class Tester():
         # Generate target data if it doesn't exist
         target_file_name = self.get_target_results_file(tau, end_time)
         if not os.path.isfile(target_file_name):
-            self.target = self.run(tau, self.setup_stepper, self.initial_condition, self.seed_time, end_time)
+            self.target,self.target_countN = self.run(tau, self.setup_stepper, self.initial_condition, self.seed_time, end_time)
             with open(target_file_name, 'wb') as file:
-                pickle.dump(self.target.as_numpy[:], file)
+                pickle.dump([self.target.as_numpy[:],self.target_countN], file)
+        else:
+            self.target = self.initial_condition.copy()
+            with open(target_file_name, 'rb') as file:
+                self.target.as_numpy[:], self.target_countN = pickle.load(file)
 
         # Generate test stepper data if it doesn't exist
         test_stepper = test_stepper(op, **stepper_args)
-        test_file_name = self.get_test_results_file(tau, test_stepper, end_time)
+        test_stepper_name = test_stepper.name +\
+                            hashlib.sha1( repr(sorted(d.items())).encode('utf-8') ).hexdigest()
+        test_file_name = self.get_test_results_file(tau, test_stepper_name, end_time)
         if not os.path.isfile(test_file_name):
-            test_results = self.run(tau, test_stepper, self.initial_condition, self.seed_time, end_time)
+            self.test_results, self.test_countN = self.run(tau, test_stepper, self.initial_condition, self.seed_time, end_time)
             with open(test_file_name, 'wb') as file:
-                pickle.dump(test_results.as_numpy[:], file)
+                pickle.dump([self.test_results.as_numpy[:],self.test_countN], file)
+        else:
+            self.test_results = self.initial_condition.copy()
+            with open(test_file_name, 'wb') as file:
+                self.test_results.as_numpy[:], self.test_countN = pickle.load(file)
         
 
     def run(self, tau, stepper, initial_condition, start_time, end_time):
         # Runs for a given stepper
         current_step = initial_condition.copy()
         time = Constant(self.seed_time)
+        coutN = 0
         while time.value < end_time:
             stepper(target=current_step, tau = tau)
             time.value += tau
-        return current_step
+            countN += stepper.countN
+        return current_step, countN
 
     def produce_results(self, tau, stepper, stepper_args, end_time):
         self.run_test(tau, stepper, stepper_args, end_time)
-        stepper = stepper(self.op, **stepper_args)
-        test_file_name = self.get_test_results_file(tau, stepper, end_time)
-        target_file_name = self.get_target_results_file(tau, end_time)
-        test_results = self.initial_condition.copy()
-        target_results = self.initial_condition.copy()
-        with open(test_file_name, 'rb') as file:
-            test_results.as_numpy[:] = pickle.load(file)
-        with open(target_file_name, 'rb') as file:
-            target_results.as_numpy[:] = pickle.load(file)
-        test_results.plot()
-        
+
 if __name__ == "__main__":
     from allenCahn import dimR, time, sourceTime, domain
     from allenCahn import test2 as problem
 
-    gridView = view(leafGridView(cartesianDomain(*domain)) )
-    space = lagrange(gridView, order=1, dimRange=dimR)
+    results = []
 
-    model, T, tauFE, u0, exact = problem(gridView)
-    op = galerkin(model, domainSpace=space, rangeSpace=space)
+    for N in [15,30,60]:
+        for tau in [1e-2,4e-2,1.6e-1]:
+            domain[2] = [N,N]
 
-    tau = 1e-2
+            gridView = view(leafGridView(cartesianDomain(*domain)) )
+            space = lagrange(gridView, order=1, dimRange=dimR)
 
-    u_h = space.interpolate(u0, name='u_h')
+            model, T, tauFE, u0, exact = problem(gridView)
+            op = galerkin(model, domainSpace=space, rangeSpace=space)
 
-    exp_arnoldi_stepper, args = steppersDict["EXPARN"]
+            tau = 1e-2
 
-    if "exp_v" in args.keys():
-        m = 5
-        args["expv_args"] = {"m":m}
+            u_h = space.interpolate(u0, name='u_h')
 
-    end_time = 3
+            exp_arnoldi_stepper, args = steppersDict["EXPARN"]
 
-    tester = Tester(u_h, op, "Allen Cahn", 1)
+            if "exp_v" in args.keys():
+                m = 5
+                args["expv_args"] = {"m":m}
 
-    
-    tester.produce_results(tau, exp_arnoldi_stepper, args, end_time)
+            end_time = 3
 
+            tester = Tester(u_h, op, "Allen Cahn", 1)
+            
+            tester.produce_results(tau, exp_arnoldi_stepper, args, end_time)
+
+            error = tester.test_results - tester.target
+            H1err = [ np.sqrt(e) for e in integrate([error**2,inner(grad(error),grad(error))]) ]
+            # if exact is not None:
+            #     exact_error = ...
+
+            # write file self.test_results.plot()
+            results += [ ["EXPARN",gridView.size(0),tau,error,
+                                 tester.target_countN,tester.test_countN] ]
+
+    # produce plots using 'results'
