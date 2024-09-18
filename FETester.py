@@ -1,9 +1,10 @@
 import numpy as np
 import pickle as pickle
 import os as os
-import haslib
+import hashlib
 from ufl import *
 from dune.ufl import Space, Constant
+from dune.fem import integrate
 from dune.fem.function import gridFunction
 from dune.fem.space import lagrange
 from dune.grid import cartesianDomain
@@ -38,8 +39,7 @@ class Tester():
         return self.folder + "_Tau:{0}_End_Time:{1}_Target.pickle".format(tau, end_time)
 
     def get_test_results_file(self, tau, stepper_name, end_time):
-        return self.folder +
-        "_Tau:{0}_End_Time:{1}_Stepper:{2}.pickle".format(tau, end_time, stepper_name)
+        return self.folder + "_Tau:{0}_End_Time:{1}_Stepper:{2}.pickle".format(tau, end_time, stepper_name)
 
     def run_setup(self, tau, setup_stepper, initial_condition):
         # File path to initial data
@@ -53,7 +53,7 @@ class Tester():
         # If not generate it
         else:
             time = Constant(0,"time")
-            initial_condition = self.run(tau, setup_stepper, initial_condition, 0, self.seed_time)
+            initial_condition, _ = self.run(tau, setup_stepper, initial_condition, 0, self.seed_time)
             with open(self.intitial_file_name, 'wb') as file:
                 pickle.dump(initial_condition.as_numpy[:], file)
     
@@ -77,7 +77,7 @@ class Tester():
         # Generate test stepper data if it doesn't exist
         test_stepper = test_stepper(op, **stepper_args)
         test_stepper_name = test_stepper.name +\
-                            hashlib.sha1( repr(sorted(d.items())).encode('utf-8') ).hexdigest()
+                            hashlib.sha1( repr(sorted(stepper_args.items())).encode('utf-8') ).hexdigest()
         test_file_name = self.get_test_results_file(tau, test_stepper_name, end_time)
         if not os.path.isfile(test_file_name):
             self.test_results, self.test_countN = self.run(tau, test_stepper, self.initial_condition, self.seed_time, end_time)
@@ -85,7 +85,7 @@ class Tester():
                 pickle.dump([self.test_results.as_numpy[:],self.test_countN], file)
         else:
             self.test_results = self.initial_condition.copy()
-            with open(test_file_name, 'wb') as file:
+            with open(test_file_name, 'rb') as file:
                 self.test_results.as_numpy[:], self.test_countN = pickle.load(file)
         
 
@@ -93,7 +93,7 @@ class Tester():
         # Runs for a given stepper
         current_step = initial_condition.copy()
         time = Constant(self.seed_time)
-        coutN = 0
+        countN = 0
         while time.value < end_time:
             stepper(target=current_step, tau = tau)
             time.value += tau
@@ -111,7 +111,9 @@ if __name__ == "__main__":
 
     for N in [15,30,60]:
         for tau in [1e-2,4e-2,1.6e-1]:
-            domain[2] = [N,N]
+            temp = list(domain)
+            temp[2] = [N,N]
+            domain = temp
 
             gridView = view(leafGridView(cartesianDomain(*domain)) )
             space = lagrange(gridView, order=1, dimRange=dimR)
@@ -141,7 +143,8 @@ if __name__ == "__main__":
             #     exact_error = ...
 
             # write file self.test_results.plot()
-            results += [ ["EXPARN",gridView.size(0),tau,error,
+            results += [ ["EXPARN",gridView.size(0),tau,error.value,
                                  tester.target_countN,tester.test_countN] ]
 
     # produce plots using 'results'
+    print(results)
