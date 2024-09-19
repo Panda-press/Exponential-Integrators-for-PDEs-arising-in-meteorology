@@ -3,6 +3,8 @@ import pickle as pickle
 import os as os
 import hashlib
 import copy
+import pandas as pd
+import matplotlib.pyplot as plt
 from ufl import *
 from dune.ufl import Space, Constant
 from dune.fem import integrate
@@ -53,10 +55,10 @@ class Tester():
 
         # If not generate it
         else:
-            time = Constant(0,"time")
-            initial_condition, _ = self.run(tau, setup_stepper, initial_condition, 0, self.seed_time)
+            self.initial_condition, _ = self.run(tau, setup_stepper, initial_condition, 0, self.seed_time)
             with open(self.intitial_file_name, 'wb') as file:
-                pickle.dump(initial_condition.as_numpy[:], file)
+                pickle.dump(self.initial_condition.as_numpy[:], file)
+        self.initial_condition.plot()
     
     def run_test(self, tau, test_stepper, stepper_args, end_time):
         
@@ -95,7 +97,7 @@ class Tester():
     def run(self, tau, stepper, initial_condition, start_time, end_time):
         # Runs for a given stepper
         current_step = initial_condition.copy()
-        time = Constant(self.seed_time)
+        time = Constant(start_time)
         countN = 0
         while time.value < end_time:
             stepper(target=current_step, tau = tau)
@@ -105,6 +107,7 @@ class Tester():
 
     def produce_results(self, tau, stepper, stepper_args, end_time):
         self.run_test(tau, stepper, stepper_args, end_time)
+        self.target.plot()
 
 if __name__ == "__main__":
     from allenCahn import dimR, time, sourceTime, domain
@@ -112,8 +115,12 @@ if __name__ == "__main__":
 
     results = []
 
-    for N in [15,30,60]:
-        for tau in [1e-2,4e-2,1.6e-1]:
+    start_time = 3
+    end_time = 3
+
+    for N in [2**i for i in range(0, 1)]:
+        N = 25
+        for tau in [1e-2]:
             temp = list(domain)
             temp[2] = [N,N]
             domain = temp
@@ -134,9 +141,8 @@ if __name__ == "__main__":
                 m = 5
                 args["expv_args"] = {"m":m}
 
-            end_time = 3
 
-            tester = Tester(u_h, op, "Allen Cahn", 1)
+            tester = Tester(u_h, op, "Allen Cahn", start_time)
             
             tester.produce_results(tau, exp_arnoldi_stepper, args, end_time)
 
@@ -150,4 +156,9 @@ if __name__ == "__main__":
                                  tester.target_countN,tester.test_countN] ]
 
     # produce plots using 'results'
-    print(results)
+
+    results = pd.DataFrame(results)
+    results.columns = ["Method", "Grid size", "Tau", "Error L2", "Target N Count", "Test N Count"]
+
+    #plt.plot(results["Target N Count"], results["Grid size"])
+    #plt.show()
