@@ -2,6 +2,7 @@ import numpy as np
 import pickle as pickle
 import os as os
 import hashlib
+import copy
 from ufl import *
 from dune.ufl import Space, Constant
 from dune.fem import integrate
@@ -76,8 +77,10 @@ class Tester():
 
         # Generate test stepper data if it doesn't exist
         test_stepper = test_stepper(op, **stepper_args)
+        temp = copy.deepcopy(stepper_args)
+        temp['exp_v'][0] = 0
         test_stepper_name = test_stepper.name +\
-                            hashlib.sha1( repr(sorted(stepper_args.items())).encode('utf-8') ).hexdigest()
+                            hashlib.sha1( repr(sorted(temp.items())).encode('utf-8') ).hexdigest()
         test_file_name = self.get_test_results_file(tau, test_stepper_name, end_time)
         if not os.path.isfile(test_file_name):
             self.test_results, self.test_countN = self.run(tau, test_stepper, self.initial_condition, self.seed_time, end_time)
@@ -143,7 +146,7 @@ if __name__ == "__main__":
             #     exact_error = ...
 
             # write file self.test_results.plot()
-            results += [ ["EXPARN",gridView.size(0),tau,error.value,
+            results += [ ["EXPARN",gridView.size(0),tau,H1err[0],
                                  tester.target_countN,tester.test_countN] ]
 
     # produce plots using 'results'
