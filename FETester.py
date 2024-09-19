@@ -58,7 +58,6 @@ class Tester():
             self.initial_condition, _ = self.run(tau, setup_stepper, initial_condition, 0, self.seed_time)
             with open(self.intitial_file_name, 'wb') as file:
                 pickle.dump(self.initial_condition.as_numpy[:], file)
-        self.initial_condition.plot()
     
     def run_test(self, tau, test_stepper, stepper_args, end_time):
         
@@ -107,7 +106,6 @@ class Tester():
 
     def produce_results(self, tau, stepper, stepper_args, end_time):
         self.run_test(tau, stepper, stepper_args, end_time)
-        self.target.plot()
 
 if __name__ == "__main__":
     from allenCahn import dimR, time, sourceTime, domain
@@ -115,11 +113,10 @@ if __name__ == "__main__":
 
     results = []
 
-    start_time = 3
+    start_time = 1
     end_time = 3
 
-    for N in [2**i for i in range(0, 1)]:
-        N = 25
+    for N in [2**i for i in range(4, 8)]:
         for tau in [1e-2]:
             temp = list(domain)
             temp[2] = [N,N]
@@ -130,8 +127,6 @@ if __name__ == "__main__":
 
             model, T, tauFE, u0, exact = problem(gridView)
             op = galerkin(model, domainSpace=space, rangeSpace=space)
-
-            tau = 1e-2
 
             u_h = space.interpolate(u0, name='u_h')
 
