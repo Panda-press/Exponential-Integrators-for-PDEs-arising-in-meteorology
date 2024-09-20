@@ -116,44 +116,62 @@ if __name__ == "__main__":
     start_time = 1
     end_time = 3
 
-    for N in [2**i for i in range(4, 8)]:
-        for tau in [1e-2]:
-            temp = list(domain)
-            temp[2] = [N,N]
-            domain = temp
+    exp_methods = ["EXPARN", "EXPLAN", "EXPKIOPS"]
 
-            gridView = view(leafGridView(cartesianDomain(*domain)) )
-            space = lagrange(gridView, order=1, dimRange=dimR)
+    for exp_method in exp_methods:
+        print("EXP method:{0}".format(exp_method))
+        for N in [2**i for i in range(3, 8)]:
+            print("N:{0}".format(N))
+            for tau in [1/2**i for i in range(3, 8)]:
+                print("Tau:{0}".format(tau))
 
-            model, T, tauFE, u0, exact = problem(gridView)
-            op = galerkin(model, domainSpace=space, rangeSpace=space)
+                temp = list(domain)
+                temp[2] = [N,N]
+                domain = temp
 
-            u_h = space.interpolate(u0, name='u_h')
+                gridView = view(leafGridView(cartesianDomain(*domain)) )
+                space = lagrange(gridView, order=1, dimRange=dimR)
 
-            exp_arnoldi_stepper, args = steppersDict["EXPARN"]
+                model, T, tauFE, u0, exact = problem(gridView)
+                op = galerkin(model, domainSpace=space, rangeSpace=space)
 
-            if "exp_v" in args.keys():
-                m = 5
-                args["expv_args"] = {"m":m}
+                u_h = space.interpolate(u0, name='u_h')
+
+                exp_stepper, args = steppersDict[exp_method]
+                if "exp_v" in args.keys():
+                    m = 5
+                    args["expv_args"] = {"m":m}
 
 
-            tester = Tester(u_h, op, "Allen Cahn", start_time)
-            
-            tester.produce_results(tau, exp_arnoldi_stepper, args, end_time)
+                tester = Tester(u_h, op, "Allen Cahn", start_time)
+                
+                tester.produce_results(tau, exp_stepper, args, end_time)
 
-            error = tester.test_results - tester.target
-            H1err = [ np.sqrt(e) for e in integrate([error**2,inner(grad(error),grad(error))]) ]
-            # if exact is not None:
-            #     exact_error = ...
+                error = tester.test_results - tester.target
+                H1err = [ np.sqrt(e) for e in integrate([error**2,inner(grad(error),grad(error))]) ]
+                # if exact is not None:
+                #     exact_error = ...
 
-            # write file self.test_results.plot()
-            results += [ ["EXPARN",gridView.size(0),tau,H1err[0],
-                                 tester.target_countN,tester.test_countN] ]
+                # write file self.test_results.plot()
+                results += [ [exp_method,gridView.size(0),tau,H1err[0],H1err[1],
+                                    tester.target_countN,tester.test_countN] ]
 
     # produce plots using 'results'
 
     results = pd.DataFrame(results)
-    results.columns = ["Method", "Grid size", "Tau", "Error L2", "Target N Count", "Test N Count"]
+    results.columns = ["Method", "Grid size", "Tau", "Error L2", "Error H1", "Target N Count", "Test N Count"]
 
-    #plt.plot(results["Target N Count"], results["Grid size"])
-    #plt.show()
+
+    plt.figure(1)
+    plt.scatter(results["Tau"], results["Target N Count"], marker=".", label="BE Method")
+    plt.xscale('log')
+    for exp_method in exp_methods:
+        trimmed_data = results[results["Method"] == exp_method]
+        plt.figure(1)
+        plt.scatter(trimmed_data["Tau"], trimmed_data["Test N Count"], marker=".", label=exp_method)
+        plt.figure(2)
+        print(trimmed_data["Test N Count"])
+        plt.scatter(trimmed_data["Tau"], trimmed_data["Error L2"], marker=".", label=exp_method)
+
+    plt.legend()
+    plt.show()
