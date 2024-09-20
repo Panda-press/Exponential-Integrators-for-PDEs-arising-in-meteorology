@@ -15,17 +15,18 @@ def Arnoldi(A, v_1, m):
             h[i,j] = np.dot(w, v[:,i])
             w -= h[i,j]*v[:,i]
             
-        if j < m:
-            h[j+1,j] = norm(w)
-            v[:,j+1] = w/h[j+1,j]
-        else:
+        h[j+1,j] = norm(w)
+        if h[j+1,j] < 1e-10:
             break
+        v[:,j+1] = w/h[j+1,j]
 
-    return csc_matrix(h[0:m,0:m]), csc_matrix(v[:,0:m])
+    return csc_matrix(h[0:j,0:j]), csc_matrix(v[:,0:j])
 
 def ArnoldiExp(A, v_1, m):
     H, V = Arnoldi(A, v_1, m)
-    e_1 = np.zeros((m))
+    if H.shape[0] == 0:
+        return np.zeros_like(v_1)
+    e_1 = np.zeros((H.shape[0]))
     e_1[0] = 1
     ret = V@expm_multiply(H,e_1)*np.linalg.norm(v_1)
     # print(v_1.dot(v_1), ret.dot(ret))

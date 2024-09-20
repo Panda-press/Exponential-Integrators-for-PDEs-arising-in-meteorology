@@ -231,7 +231,7 @@ class BEStepper(BaseStepper):
 
     def __call__(self, target, tau):
         try:
-            self.N.model.sourceTime += time.value
+            self.N.model.sourceTime += tau
         except AttributeError:
             pass
         self.setup(target,tau)
