@@ -27,10 +27,10 @@ Where $A$ is a large sparse matrix and $R$ denotes some nonlinear term.
 As a result, finding accurate approximate solutions to these equations is of major importance.\\
 
 %Method of lines
-Often ODEs also occure when solving PDEs numerically using the method of lines.
+Often ODEs also occur when solving PDEs numerically using the method of lines.
 This arrives from discretising the PDE in space yielding an ODE with respect to time, with the form shown in \eqref{ODE}.\\
 %ODE Solvers
-Soving these ODEs numerically works by progressively stepping through time such as with the explicit forward Euler method, which is given as:
+Solving these ODEs numerically works by progressively stepping through time such as with the explicit forward Euler method, which is given as:
 \begin{align*}
 u(t+\tau) &\approx u(t) + \tau\dot u(t) = u(t) + \tau(Au(t) + N(u(t)))
 \end{align*}
@@ -135,7 +135,7 @@ Here we run numerical experiments, computing $e^Av$ for a tridiagonal matrix $A$
 	  \includegraphics[width=\linewidth]{Plots/M v Comp Time Results for N=524288.png}
 	  \label{fig:MEe6}
        \centering
-	  \includegraphics[width=\linewidth]{Plots/Comp time v E Results for N=524288.png}
+	  \includegraphics[width=\linewidth]{Plots/Comp Time v E Results for N=524288.png}
 	  \label{fig:MEe6}
     \end{minipage}
 \end{figure}
