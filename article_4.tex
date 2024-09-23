@@ -149,6 +149,23 @@ Below we compare the time required for the different algorithms to get below an 
 \includegraphics[width=\linewidth]{Plots/time to get below an error of 1e-10.png}
 \end{figure}
 Again we continue to see that the Lanzcos algorithm outperforms the Arnodli algorithm.
+
+\section{Application to Finite Element Methods}
+Here we discuss the application of the exponential integrator to finite element methods.
+
+We begin with a finite element problem in the weak form:
+\begin{align*}
+\int \frac d{dt}u_j v_j - R(u)_j v_j dx &= \mathcal{L}(u,v)\\
+\text{substituting } u(t,x) &= \sum_{i=1}^n u_i(t)v_i(x)\\
+\text{we get } \int\sum_{i=1}^n(\frac d{dt}u_i(t)v_i(x)v_j(x))dx - R_jv_j(x) &= \sum_{i=1}^n u_i(t)\mathcal{L}(v_i(x)v_j(x))\\
+\frac d{dt}u_i(t)\sum_{i=1}^n\int(v_i(x)v_j(x))dx - R_jv_j(x) &= \sum_{i=1}^n u_i(t)\mathcal{L}(v_i(x)v_j(x))\\
+M\frac d{dt}u(t) - R &= Lu\\
+\frac d{dt}u(t) &= M^{-1}(Lu + R(u))
+\end{align*}
+A clear limiting factor when computing $M^{-1}(Lu + R(u))$ is taking the inverse of $M$, the matrix.
+One way around this is to perform mass lumping on the matrix, where we sum up the values along each row and place them along the diagonal.
+From here computing the inverse is trivial.
+
 \clearpage
 \newpage
 \bibliographystyle{plain}
