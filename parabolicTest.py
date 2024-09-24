@@ -35,7 +35,7 @@ def paraTest1(gridView):
 
 def paraTest2(gridView):
     tauFE = 7e-5 # check if this is correct
-    freq = 6*pi
+    freq = 2*pi
     xExact = as_vector([ cos(freq*x[0]) ])
     exact = lambda t: cos(freq**2*t) * xExact
     dtExact = lambda t: -freq**2*sin(freq**2*t) * xExact
