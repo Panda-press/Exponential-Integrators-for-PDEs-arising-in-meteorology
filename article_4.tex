@@ -18,6 +18,7 @@
 \newpage
 
 \section {Introduction}
+\subsection{Motivation}
 %Statement of ODE
 In many simulations, it is common to encounter ODEs of the form
 \begin{align}
@@ -29,10 +30,11 @@ As a result, finding accurate approximate solutions to these equations is of maj
 %Method of lines
 Often ODEs also occur when solving PDEs numerically using the method of lines.
 This arrives from discretising the PDE in space yielding an ODE with respect to time, with the form shown in \eqref{ODE}.\\
+\subsection{Solvers}
 %ODE Solvers
 Solving these ODEs numerically works by progressively stepping through time such as with the explicit forward Euler method, which is given as:
 \begin{align*}
-u(t+\tau) &\approx u(t) + \tau\dot u(t) = u(t) + \tau(Au(t) + N(u(t)))
+u(t+\tau) &\approx u(t) + \tau\dot u(t) = u(t) + \tau(Au(t) + R(u(t)))
 \end{align*}
 for a given step size $h$.
 %Exponential Integrators
@@ -44,6 +46,7 @@ u(t+\tau) &= e^{Ah}u(t) + \int_0^h e^{A(\tau-z)}N(u(t+z)) dz \label{ODE Solution
 \text{where } e^{A} &= \sum^{\infty}_{i = 0}\frac{A^n}{n!}
 \end{align*}
 %Computing matrix exponential for A sparse
+\subsection{Computing the Matrix Exponential}
 An important requirement when using this method is to compute approximations of $e^{A}v$ efficiently and accurately for the given sparse matrix $A$ and vector $v$.
 One approach would be first to compute $e^A$ and apply the resulting matrix to the vector $v$.
 However, even for sparse $A$, $e^{A}$ will likely be dense. For large $A$ this will result in very high memory usage, which may not be practical when approximating solutions to \eqref{ODE Solution}.
@@ -52,6 +55,15 @@ Various methods have been proposed for this such as by Al-Mohy, Awad H. and High
 Another class of methods known as Krylov subspace methods have gained traction recently\cite{Moler2003}.
 These work by projecting the problem onto a space with fewer dimensions (the Kyrlov subspace), computing the matrix exponential and then transforming back to the original space.
 As the matrix exponential will be computed in the lower dimension Kyrlov subspace the computation cost of this step will not be significant.
+\subsection{Matrix Free Methods}
+Another way of reducing computation time is the use of matrix-free methods.
+Frequently to arrive at $\dot u(t) = Au(t) + R(u)$ we will have begun with $\dot u(t) = N(u)$ and linearise around $u(t)$ giving:
+\begin{align*}
+Au &= DN(u)
+&\approx \frac{N(u+\epsilon)-N(u)}{\epsilon}
+\end{align*}
+As a result, we can approximate the action of the matrix  $A$ on $u$ without having to compute $A$ directly or perform a matrix-vector multiplication
+
 \section{Krylov Subspace Methods}
 In this section, we will look into existing Krylov subspace methods and then compare how these methods perform for approximating $e^{A}v$.
 
@@ -120,20 +132,34 @@ Here we run numerical experiments, computing $e^Av$ for a tridiagonal matrix $A$
        \centering
 	  \includegraphics[width=\linewidth]{Plots/M v E Results for N=131072.png}
 	  \label{fig:MEe7}
-       \centering
-	  \includegraphics[width=\linewidth]{Plots/M v Comp Time Results for N=131072.png}
-	  \label{fig:MEe7}
-       \centering
-	  \includegraphics[width=\linewidth]{Plots/Comp Time v E Results for N=131072.png}
-	  \label{fig:MEe7}
     \end{minipage}\hfill
     \begin{minipage}{0.5\textwidth}
        \centering
 	  \includegraphics[width=\linewidth]{Plots/M v E Results for N=524288.png}
 	  \label{fig:MEe6}
+    \end{minipage}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/M v Comp Time Results for N=131072.png}
+	  \label{fig:MEe7}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
        \centering
 	  \includegraphics[width=\linewidth]{Plots/M v Comp Time Results for N=524288.png}
 	  \label{fig:MEe6}
+    \end{minipage}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{Plots/Comp Time v E Results for N=131072.png}
+	  \label{fig:MEe7}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
        \centering
 	  \includegraphics[width=\linewidth]{Plots/Comp Time v E Results for N=524288.png}
 	  \label{fig:MEe6}
@@ -153,12 +179,16 @@ Again we continue to see that the Lanzcos algorithm outperforms the Arnodli algo
 \section{Application to Finite Element Methods}
 Here we discuss the application of the exponential integrator to finite element methods.
 
-We begin with a finite element problem in the weak form:
+We begin with a finite element problem in the weak form with $V_h$ a finite-dimensional space.
 \begin{align*}
-\int \frac d{dt}u_j v_j - R(u)_j v_j dx &= \mathcal{L}(u,v)\\
-\text{substituting } u(t,x) &= \sum_{i=1}^n u_i(t)v_i(x)\\
-\text{we get } \int\sum_{i=1}^n(\frac d{dt}u_i(t)v_i(x)v_j(x))dx - R_jv_j(x) &= \sum_{i=1}^n u_i(t)\mathcal{L}(v_i(x)v_j(x))\\
-\frac d{dt}u_i(t)\sum_{i=1}^n\int(v_i(x)v_j(x))dx - R_jv_j(x) &= \sum_{i=1}^n u_i(t)\mathcal{L}(v_i(x)v_j(x))\\
+\int \frac d{dt}u(t,x) v_j - R(u) v_j dx &= \mathcal{L}(u,v)\text{Where $v_j$ is a basis of $V_h$}\\
+\text{substituting in } u(t,x) &= \sum_{i=1}^n u_i(t)v_i(x)\\
+\text{we get } \int\sum_{i=1}^n(\frac d{dt}u_i(t)v_i(x)v_j(x))dx - R(u)v_j(x)dx &= \sum_{i=1}^n u_i(t)\mathcal{L}(v_i(x)v_j(x))\\
+\frac d{dt}u_i(t)\sum_{i=1}^n\int v_i(x)v_j(x)dx - \int R(u)v_j(x)dx &= \sum_{i=1}^n u_i(t)\mathcal{L}(v_i(x)v_j(x))\\
+\text{setting } S_{ij} &= \mathcal{L}(v_i(x)v_j(x))\\
+R_j &= \int R(u)v_j(x)dx\\
+M &= \int v_i(x)v_j(x)dx\\
+\text{We get}\\
 M\frac d{dt}u(t) - R &= Lu\\
 \frac d{dt}u(t) &= M^{-1}(Lu + R(u))
 \end{align*}
@@ -166,6 +196,40 @@ A clear limiting factor when computing $M^{-1}(Lu + R(u))$ is taking the inverse
 One way around this is to perform mass lumping on the matrix, where we sum up the values along each row and place them along the diagonal.
 From here computing the inverse is trivial.
 
+\subsection{Numerical Results}
+We will now look at the application of the exponential integrator to numerical problems.
+
+We ran our tests over several $N\times N$ grids for various values of $N$ and a selection of values for our time step $\tau$.
+There is an initial "seeding" phase where we use a predetermined stepper to compute an approximation from time $t=0$ to a predetermined seed time $t_s$ and with a seeding time step $\tau_s$ producing an approximation at the seed time of $u_s$.
+From here we can test our different steppers beginning at time $t_s$ with initial condition $u_s$ using a time step $\tau$ and run until an end time $t_e$.
+
+\subsubsection{Parabolic Problem}
+Here we look at the results for a Parabolic Problem given below:
+
+The exact solution is given below:
+\begin{align*}
+\hat u(t,x) &= cos(4\pi t)cos(2\pi x_0)
+\end{align*}
+
+We set $t_s = 0$ and $t_e = 0.02$ and test with $\tau = 2\times 10^{-4}, 1\times 10^{-4}, 5\times 10^{-5}, 2.5\times 10^{-5}, 1.25\times 10^{-5}$.
+For grid sizes, we use $N\times N$ with $N = 10,30,60$.
+
+The metrics we will be comparing are the L2 error given by $\int |u_e - \hat u|$ and the number of calls to the operator $N$ (as we are using a matrix-free method).
+We present the results for the Arnoldi, Lanczos, Kipops\cite{Gaudreault2018} and Backward Euler methods.
+
+\begin{figure}[H]
+	  \includegraphics[width=\linewidth]{FEMethodPlots/Operator Calls V Error for Parabolic Test2 with grid size 100.png}
+\end{figure}
+\begin{figure}[H]
+	  \includegraphics[width=\linewidth]{FEMethodPlots/Operator Calls V Error for Parabolic Test2 with grid size 900.png}
+\end{figure}
+\begin{figure}[H]
+	  \includegraphics[width=\linewidth]{FEMethodPlots/Operator Calls V Error for Parabolic Test2 with grid size 3600.png}
+\end{figure}
+
+From this we see that for $1.25\times 10^{3}$ calls to the 
+
+\subsubsection{Allen Cahn}
 \clearpage
 \newpage
 \bibliographystyle{plain}
