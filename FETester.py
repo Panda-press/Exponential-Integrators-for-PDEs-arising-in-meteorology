@@ -131,7 +131,7 @@ class Tester():
         self.run_test(tau, stepper, stepper_args, end_time)
 
 if __name__ == "__main__":
-    if True:
+    if False:
         from allenCahn import dimR, time, sourceTime, domain
         from allenCahn import test2 as problem
         problemName = "Allen Cahn Test2"
@@ -140,25 +140,21 @@ if __name__ == "__main__":
         tau0 = 1e-1
     else:
         from parabolicTest import dimR, time, sourceTime, domain
-        from parabolicTest import paraTest1 as problem
-        problemName = "Parabolic Test1"
-        tau0 = 1e-4  # 2e-3,N:32,Tau:0.002: compare m=5->m=10
-        start_time = 0.0005
-        end_time = 0.001
+        from parabolicTest import paraTest2 as problem
+        problemName = "Parabolic Test2"
+        tau0 = 2e-4  # 2e-3,N:32,Tau:0.002: compare m=5->m=10
+        start_time = 0.00
+        end_time = 0.02
     exp_methods = ["EXPARN", "EXPLAN", "EXPKIOPS", "BE"]
 
     results = []
 
-
-    # exp_methods = ["EXPLAN", "EXPARN", "EXPKIOPS"]
-
-
     domain = list(domain)
     for exp_method in exp_methods:
         print("EXP method:{0}".format(exp_method))
-        for N in [10, 30, 60, 120]:
+        for N in [10, 30, 60]:
             print("N:{0}".format(N))
-            for tau in tau0*np.array([1/2**i for i in range(0, 4)]):
+            for tau in tau0*np.array([1/2**i for i in range(0, 5)]):
                 print("Tau:{0}".format(tau))
 
                 domain[2] = [N,N]
@@ -229,12 +225,12 @@ if __name__ == "__main__":
     markers = ["1", "2", "3", "4"]
     for grid_size in results["Grid Size"].unique():
         if "BE" not in exp_methods:
-            plt.scatter(results["Target N Count"], results["Error L2"], marker="x", label="BE Method")
+            plt.plot(results["Target N Count"], results["Error H1"], marker="x", label="BE Method")
         for i, exp_method in enumerate(exp_methods):
             trimmed_data = results[results["Method"] == exp_method]
             trimmed_data = trimmed_data[trimmed_data["Grid Size"] == grid_size]
 
-            plt.scatter(trimmed_data["Test N Count"], trimmed_data["Error L2"], marker=markers[i], label=exp_method)
+            plt.plot(trimmed_data["Test N Count"], trimmed_data["Error H1"], marker=markers[i], label=exp_method)
 
         plt.legend()
         plt.xlabel("Calls")
