@@ -51,7 +51,7 @@ An important requirement when using this method is to compute approximations of 
 One approach would be first to compute $e^A$ and apply the resulting matrix to the vector $v$.
 However, even for sparse $A$, $e^{A}$ will likely be dense. For large $A$ this will result in very high memory usage, which may not be practical when approximating solutions to \eqref{ODE Solution}.
 One solution to reduce memory usage is to compute $e^{A}v$ directly without computing $e^{A}$ as an intermediary step.\\
-Various methods have been proposed for this such as by Al-Mohy, Awad H. and Higham, Nicholas J\cite{AlMohy2011} which is currently used in the Scipy package as \verb|scipy.sparse.linalg.expm_multiply|.
+Various methods have been proposed for this such as by Al-Mohy, Awad H. and Higham, Nicholas J\cite{AlMohy2011} and Higham, N. J., and Al-Mohy, A. H. \cite{Higham2010} which is currently used in the Scipy package as \verb|scipy.sparse.linalg.expm_multiply|.
 Another class of methods known as Krylov subspace methods have gained traction recently\cite{Moler2003}.
 These work by projecting the problem onto a space with fewer dimensions (the Kyrlov subspace), computing the matrix exponential and then transforming back to the original space.
 As the matrix exponential will be computed in the lower dimension Kyrlov subspace the computation cost of this step will not be significant.
@@ -59,7 +59,7 @@ As the matrix exponential will be computed in the lower dimension Kyrlov subspac
 Another way of reducing computation time is the use of matrix-free methods.
 Frequently to arrive at $\dot u(t) = Au(t) + R(u)$ we will have begun with $\dot u(t) = N(u)$ and linearise around $u(t)$ giving:
 \begin{align*}
-Au &= DN(u)
+Au &= DN(u)\\
 &\approx \frac{N(u+\epsilon)-N(u)}{\epsilon}
 \end{align*}
 As a result, we can approximate the action of the matrix  $A$ on $u$ without having to compute $A$ directly or perform a matrix-vector multiplication
@@ -204,11 +204,14 @@ There is an initial "seeding" phase where we use a predetermined stepper to comp
 From here we can test our different steppers beginning at time $t_s$ with initial condition $u_s$ using a time step $\tau$ and run until an end time $t_e$.
 
 \subsubsection{Parabolic Problem}
-Here we look at the results for a Parabolic Problem given below:
-
-The exact solution is given below:
+Here we look at the results for a Parabolic Problem given in the weak form below:
 \begin{align*}
-\hat u(t,x) &= cos(4\pi t)cos(2\pi x_0)
+\text{with exact solution }\hat u(t,x) &= cos(4\pi t)cos(2\pi x_0) \text{ we have}\\
+\int \partial_tu v dx&= a(u,v) - l(v)\\
+\text{where }a(u,v) &= \int \nabla u \cdot \nabla v + u \cdot v dx\\
+\text{and }l(v) &= \int\partial_tu - \nabla \cdot \nabla \hat u)  v_0\\
+&+\hat u \cdot vdx\\
+&+\int \nabla \hat u \cdot n v_0 dx
 \end{align*}
 
 We set $t_s = 0$ and $t_e = 0.02$ and test with $\tau = 2\times 10^{-4}, 1\times 10^{-4}, 5\times 10^{-5}, 2.5\times 10^{-5}, 1.25\times 10^{-5}$.
@@ -227,9 +230,109 @@ We present the results for the Arnoldi, Lanczos, Kipops\cite{Gaudreault2018} and
 	  \includegraphics[width=\linewidth]{FEMethodPlots/Operator Calls V Error for Parabolic Test2 with grid size 3600.png}
 \end{figure}
 
-From this we see that for $1.25\times 10^{3}$ calls to the 
+From this, we see that for about $1.25\times 10^{3}$ calls to the operator, we achieve a lower error than the backward-euler method was able to.
+This corresponds to a tau of $ 5\times 10^{-5}$.
+We also observe that after this value, error for all methods plateaus and even increases.
 
 \subsubsection{Allen Cahn}
+Here we apply the same exponential integrator methods as above to the Allan Cahn equations.
+We give the Allen Cahn equations in weak form below
+
+\begin{align*}
+\int \partial_tu v dx &= a(u,v)\\
+\text {where } a(u,v) &= \int 10^{-4} \nabla u \cdot \nabla v + (u^2-1)uv dx
+\end{align*}
+
+For computing our seed we have $t_s = 4$ and use $\tau = 10^{-2}$ with the Backward Euler method.
+For the true value $\hat u$ we use the Backward Euler method to approximate it with $\tau = 10^{-4}$.
+We set $t_s = 4$ and $t_e = 50$ and test with $\tau = 2.5\times 10^{-2}$.
+For grid sizes, we use $N\times N$ with $N = 60$.
+
+
+We provide the plot of the seed and at times $t = 20, 50$ for the different methods. 
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_Seed BE_EndTime=50.png}
+	\caption{Seed $t=4$}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_Target BE_EndTime=20.png}
+	  \caption{True $t=20$}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_Target BE_EndTime=50.png}
+	  \caption{True $t=50$}
+    \end{minipage}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_BE_EndTime=20.png}
+	  \caption{Backward Euler $t=20$}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_BE_EndTime=50.png}
+	  \caption{Backward Euler$t=50$}
+    \end{minipage}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_EXPARN_EndTime=20.png}
+	  \caption{Arnoldi $t=20$}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_EXPARN_EndTime=50.png}
+	  \caption{Arnoldi $t=50$}
+    \end{minipage}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_EXPLAN_EndTime=20.png}
+	  \caption{Lanzcos $t=20$}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_EXPLAN_EndTime=50.png}
+	  \caption{Lanzcos $t=50$}
+    \end{minipage}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_EXPKIOPS_EndTime=20.png}
+	  \caption{Kiops $t=20$}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
+       \centering
+	  \includegraphics[width=\linewidth]{FEPics/Allen Cahn Test2_60x60_0.025_EXPKIOPS_EndTime=50.png}
+	  \caption{Kiops $t=50$}
+    \end{minipage}
+\end{figure}
+
+The plots for different methods appear to be largely similar to each other.
+
+\section{Conclusion}
+Kyrlov subspace methods for computing the action of the matrix exponential on the vector appear to outperform some already commonly used methods such as those used in the scipy library regarding computation time. As a result, when applied to the numerical solutions of PDEs via finite element methods with the use of exponential integrators, we see that Krylov subspace methods appear to be able to achieve a lower minimum L2 error when applied to parabolic problems than the Backward Euler method, especially for finer grid spacing, implying that they may be more suitable for finner grid spacings.
+We also see that when applied to the Allen Cahn equations we achieve approximately similar results to the Backward Euler method suggesting that they are also useful for this application.
+
+\section{Outlook}
+Further areas requiring investigation include:
+Finding how many dimensions are necessary for the Kyrlov subspace to achieve a good approximation for a given problem. Kiops attempts to calculate an optimal size but the Arnoldi and Lanzcos methods achieved comparable results for a lower dimension and were therefore faster.
+
+
 \clearpage
 \newpage
 \bibliographystyle{plain}
